@@ -1,0 +1,53 @@
+name: CodeQL
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Roda toda segunda-feira às 06:00 UTC, além dos triggers de push/PR.
+    # Isso pega vulnerabilidades novas descobertas em padrões que já
+    # existiam no código, mesmo sem commit novo.
+    - cron: '0 6 * * 1'
+
+jobs:
+  analyze:
+    name: Analyze
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      packages: read
+      actions: read
+      contents: read
+
+    strategy:
+      fail-fast: false
+      matrix:
+        language: ['javascript-typescript']
+        # 'javascript-typescript' cobre tanto o backend (Node/TS)
+        # quanto o client, quando ele existir, desde que seja JS/TS.
+        # Se o client acabar usando outra linguagem (ex.: GDScript no
+        # Godot), o CodeQL não tem suporte a ela — nesse caso essa
+        # entrada continua cobrindo só o backend normalmente.
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          # queries: security-extended
+          # Descomente a linha acima se quiser um conjunto de checks
+          # mais abrangente (inclui mais alertas de qualidade, não só
+          # segurança). Por padrão já vem o conjunto 'security' padrão.
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: '/language:${{ matrix.language }}'
