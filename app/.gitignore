@@ -8,6 +8,7 @@ pnpm-debug.log*
 lerna-debug.log*
 
 node_modules
+src/routeTree.gen.ts
 dist
 dist-ssr
 .output
@@ -31,5 +32,5 @@ dist-ssr
 *.sln
 *.sw?
 
-# Secrets — not pulled from Lovable, keep local only
+# Secrets — keep local only
 .env
