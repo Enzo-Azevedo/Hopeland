@@ -2,7 +2,6 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { z } from "zod";
 import { ArrowLeft, Loader2, Swords } from "lucide-react";
-import { lovable } from "@/integrations/lovable";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -59,17 +58,21 @@ function AuthPage() {
   async function handleGoogle() {
     setLoading(true);
     try {
-      const result = await lovable.auth.signInWithOAuth("google", {
-        redirect_uri: window.location.origin,
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: `${window.location.origin}${redirect ?? "/character-creation"}`,
+        },
       });
-      if (result.error) {
+      if (error) {
         toast.error("Falha ao entrar com Google", {
-          description: result.error.message,
+          description: error.message,
         });
         setLoading(false);
         return;
       }
-      if (result.redirected) return;
+      // On success, Supabase redirects the browser away to Google —
+      // nothing else to do here.
     } catch {
       toast.error("Erro inesperado ao entrar");
       setLoading(false);
