@@ -1,0 +1,36 @@
+{
+  // ATENÇÃO — arquivo experimental, ver PR para plano de reversão.
+  //
+  // Este projeto nunca teve um wrangler.jsonc versionado; todo deploy até
+  // agora usou a configuração automática do Wrangler (detecção de framework
+  // ao rodar `npx wrangler deploy` sem arquivo de config). Isso funciona,
+  // mas reseta "vars" configuradas manualmente no dashboard a cada deploy
+  // (comportamento documentado da Cloudflare — dashboard vars são
+  // sobrescritas no próximo deploy a menos que keep_vars esteja setado
+  // aqui, o que exige ter ESTE arquivo presente).
+  //
+  // Os campos "main" e "assets.directory" abaixo são inferidos a partir de:
+  //   - convenção padrão do preset "cloudflare_module" do Nitro
+  //   - o binding "env.ASSETS" observado nos logs de deploy reais
+  // Não foram confirmados 1:1 contra o que a detecção automática gerou
+  // internamente (a Cloudflare não expôs esse config em nenhum PR ou
+  // painel visível). Se o próximo deploy falhar por causa desse arquivo,
+  // a correção é reverter este commit — isso remove o arquivo e volta a
+  // usar a configuração automática, que sabemos que funciona.
+
+  "name": "hopeland",
+  "compatibility_date": "2025-04-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "main": ".output/server/index.mjs",
+  "assets": {
+    "directory": ".output/public",
+    "binding": "ASSETS"
+  },
+  "keep_vars": true,
+  "vars": {
+    "SUPABASE_URL": "https://tekvkpxneckdxhtkcfeo.supabase.co",
+    "SUPABASE_PUBLISHABLE_KEY": "sb_publishable_II4hM8XJx1Pe494BM38k3Q_moMX-G1y",
+    "VITE_SUPABASE_URL": "https://tekvkpxneckdxhtkcfeo.supabase.co",
+    "VITE_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_II4hM8XJx1Pe494BM38k3Q_moMX-G1y"
+  }
+}
