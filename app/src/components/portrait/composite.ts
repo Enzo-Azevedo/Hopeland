@@ -51,8 +51,10 @@ function tinted(img: HTMLImageElement, color: string): HTMLCanvasElement {
 export async function compositePortrait(
   canvas: HTMLCanvasElement,
   layers: SelectedLayer[],
+  isCancelled: () => boolean = () => false,
 ): Promise<void> {
   const images = await Promise.all(layers.map((l) => loadImage(l.url)));
+  if (isCancelled()) return;
   const ctx = canvas.getContext("2d")!;
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   layers.forEach((layer, i) => {

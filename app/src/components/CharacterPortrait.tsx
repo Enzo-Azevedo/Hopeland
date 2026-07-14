@@ -32,7 +32,7 @@ export function CharacterPortrait({ appearance, mood, size = 192, className, lab
     loadManifest()
       .then((manifest) => {
         if (cancelled) return;
-        return compositePortrait(canvas, selectPortraitLayers(appearance, mood, manifest));
+        return compositePortrait(canvas, selectPortraitLayers(appearance, mood, manifest), () => cancelled);
       })
       .catch((error) => {
         console.error("[portrait] falling back to geometric render:", error);
