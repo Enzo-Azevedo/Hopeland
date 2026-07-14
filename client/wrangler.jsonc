@@ -27,6 +27,12 @@
     "binding": "ASSETS"
   },
   "keep_vars": true,
+  "observability": {
+    "logs": {
+      "enabled": true,
+      "invocation_logs": true
+    }
+  },
   "vars": {
     "SUPABASE_URL": "https://tekvkpxneckdxhtkcfeo.supabase.co",
     "SUPABASE_PUBLISHABLE_KEY": "sb_publishable_II4hM8XJx1Pe494BM38k3Q_moMX-G1y",
