@@ -1,0 +1,125 @@
+{
+  "version": 1,
+  "size": 320,
+  "credit": "Portrait assets by TwoPenny — Portraits of the Rim (Nexus 425)",
+  "layers": {
+    "neck": {
+      "tint": "skin",
+      "variants": {
+        "f-average": "neck/f-average.webp",
+        "f-heavy": "neck/f-heavy.webp",
+        "f-hulk": "neck/f-hulk.webp",
+        "f-thin": "neck/f-thin.webp",
+        "m-average": "neck/m-average.webp",
+        "m-heavy": "neck/m-heavy.webp",
+        "m-hulk": "neck/m-hulk.webp",
+        "m-thin": "neck/m-thin.webp"
+      }
+    },
+    "clothes": {
+      "tint": null,
+      "variants": {
+        "alquimista": "clothes/alquimista.webp",
+        "bibliotecario": "clothes/bibliotecario.webp",
+        "comerciante": "clothes/comerciante.webp",
+        "contador": "clothes/contador.webp",
+        "equilibrista": "clothes/equilibrista.webp",
+        "estivador": "clothes/estivador.webp",
+        "ferreiro": "clothes/ferreiro.webp",
+        "lenhador": "clothes/lenhador.webp",
+        "menestrel": "clothes/menestrel.webp",
+        "mensageiro": "clothes/mensageiro.webp",
+        "pescador": "clothes/pescador.webp",
+        "taberneiro": "clothes/taberneiro.webp"
+      }
+    },
+    "head": {
+      "tint": "skin",
+      "variants": {
+        "f-averagenormal": "head/f-averagenormal.webp",
+        "f-averagepointy": "head/f-averagepointy.webp",
+        "f-averagewide": "head/f-averagewide.webp",
+        "f-narrownormal": "head/f-narrownormal.webp",
+        "f-narrowpointy": "head/f-narrowpointy.webp",
+        "f-narrowwide": "head/f-narrowwide.webp",
+        "m-averagenormal": "head/m-averagenormal.webp",
+        "m-averagepointy": "head/m-averagepointy.webp",
+        "m-averagewide": "head/m-averagewide.webp",
+        "m-narrownormal": "head/m-narrownormal.webp",
+        "m-narrowpointy": "head/m-narrowpointy.webp",
+        "m-narrowwide": "head/m-narrowwide.webp"
+      }
+    },
+    "face-inner": {
+      "tint": "skin",
+      "variants": {
+        "f-high-1": "face-inner/f-high-1.webp",
+        "f-high-2": "face-inner/f-high-2.webp",
+        "f-high-3": "face-inner/f-high-3.webp",
+        "f-low-1": "face-inner/f-low-1.webp",
+        "f-low-2": "face-inner/f-low-2.webp",
+        "f-low-3": "face-inner/f-low-3.webp",
+        "f-mid-1": "face-inner/f-mid-1.webp",
+        "f-mid-2": "face-inner/f-mid-2.webp",
+        "f-mid-3": "face-inner/f-mid-3.webp",
+        "m-high-1": "face-inner/m-high-1.webp",
+        "m-high-2": "face-inner/m-high-2.webp",
+        "m-high-3": "face-inner/m-high-3.webp",
+        "m-low-1": "face-inner/m-low-1.webp",
+        "m-low-2": "face-inner/m-low-2.webp",
+        "m-low-3": "face-inner/m-low-3.webp",
+        "m-mid-1": "face-inner/m-mid-1.webp",
+        "m-mid-2": "face-inner/m-mid-2.webp",
+        "m-mid-3": "face-inner/m-mid-3.webp"
+      }
+    },
+    "face-outer": {
+      "tint": null,
+      "variants": {
+        "f-high-1": "face-outer/f-high-1.webp",
+        "f-high-2": "face-outer/f-high-2.webp",
+        "f-high-3": "face-outer/f-high-3.webp",
+        "f-low-1": "face-outer/f-low-1.webp",
+        "f-low-2": "face-outer/f-low-2.webp",
+        "f-low-3": "face-outer/f-low-3.webp",
+        "f-mid-1": "face-outer/f-mid-1.webp",
+        "f-mid-2": "face-outer/f-mid-2.webp",
+        "f-mid-3": "face-outer/f-mid-3.webp",
+        "m-high-1": "face-outer/m-high-1.webp",
+        "m-high-2": "face-outer/m-high-2.webp",
+        "m-high-3": "face-outer/m-high-3.webp",
+        "m-low-1": "face-outer/m-low-1.webp",
+        "m-low-2": "face-outer/m-low-2.webp",
+        "m-low-3": "face-outer/m-low-3.webp",
+        "m-mid-1": "face-outer/m-mid-1.webp",
+        "m-mid-2": "face-outer/m-mid-2.webp",
+        "m-mid-3": "face-outer/m-mid-3.webp"
+      }
+    },
+    "beard": {
+      "tint": "hair",
+      "variants": {
+        "anchor": "beard/anchor.webp",
+        "bushy": "beard/bushy.webp",
+        "circle": "beard/circle.webp",
+        "classy": "beard/classy.webp",
+        "french": "beard/french.webp"
+      }
+    },
+    "hair": {
+      "tint": "hair",
+      "variants": {
+        "afro": "hair/afro.webp",
+        "bob": "hair/bob.webp",
+        "bowlcut": "hair/bowlcut.webp",
+        "curly": "hair/curly.webp",
+        "long": "hair/long.webp",
+        "messy": "hair/messy.webp",
+        "mohawk": "hair/mohawk.webp",
+        "ponytails": "hair/ponytails.webp",
+        "tuft": "hair/tuft.webp",
+        "wavy": "hair/wavy.webp"
+      }
+    }
+  }
+}
