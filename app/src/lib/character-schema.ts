@@ -1,6 +1,8 @@
 // Client-mirror of backend character logic. Keep in sync with
 // backend/src/character/skills.ts (backend is gitignored, local-only).
 
+import { genderFromSeed } from "./portrait-selection";
+
 export type Category = "fisica" | "intelectual" | "agil" | "social";
 export type Profession =
   | "ferreiro" | "lenhador" | "estivador"
@@ -14,9 +16,9 @@ export type Origin =
 export interface Passive { key: string; label: string; value: number }
 
 // ---------- Appearance ----------
-// Structural placeholders. Each layer maps to a future art asset via
-// APPEARANCE_ASSET_MAP; for now the portrait renders geometric primitives
-// using the tokens below.
+// Layers are resolved to real art assets via the portrait manifest
+// (see portrait-selection.ts) using appearance.seed as the sole
+// randomness source.
 export type SkinTone =
   | "warm_tan" | "pale_flushed" | "earth_deep"
   | "light_brown" | "very_pale" | "gray_tan" | "neutral";
@@ -30,9 +32,10 @@ export interface Appearance {
   skinTone: SkinTone;
   facialMark: FacialMark;
   build: Build;
-  // Placeholder layers reserved for future systems.
+  seed: number;          // u32; sole randomness source for portrait layers
+  gender: "f" | "m";     // = genderFromSeed(seed); stored for future explicit choice
+  clothes: Profession;   // 1:1 with profession, resolved via the portrait manifest
   hair: "placeholder_default";
-  clothes: "placeholder_default";
   scars: "placeholder_none";
 }
 
@@ -153,12 +156,15 @@ export function buildCharacter(input: {
   for (const sp of o.skillPoints) add(skills, sp.path, sp.amount);
 
   const appearanceBase = ORIGIN_APPEARANCE[input.origin];
+  const seed = crypto.getRandomValues(new Uint32Array(1))[0];
   const appearance: Appearance = {
     skinTone: appearanceBase.skinTone,
     facialMark: appearanceBase.facialMark,
     build: buildFromPhysical(skills.fisica),
+    seed,
+    gender: genderFromSeed(seed),
+    clothes: input.profession,
     hair: "placeholder_default",
-    clothes: "placeholder_default",
     scars: "placeholder_none",
   };
 
@@ -182,14 +188,3 @@ export function validateCharacterName(raw: string): string {
   }
   return name;
 }
-
-// Future asset wiring — swap keys for real files when art is ready.
-export const APPEARANCE_ASSET_MAP = {
-  skinTone: {} as Record<SkinTone, string>,
-  facialMark: {} as Record<FacialMark, string>,
-  build: {} as Record<Build, string>,
-  expression: {} as Record<MoodExpression, string>,
-  hair: {} as Record<string, string>,
-  clothes: {} as Record<string, string>,
-  scars: {} as Record<string, string>,
-};
