@@ -3,8 +3,24 @@ name: CodeQL
 on:
   push:
     branches: [main]
+    paths:
+      - '**/*.js'
+      - '**/*.jsx'
+      - '**/*.mjs'
+      - '**/*.cjs'
+      - '**/*.ts'
+      - '**/*.tsx'
+      - '.github/workflows/codeql.yml'
   pull_request:
     branches: [main]
+    paths:
+      - '**/*.js'
+      - '**/*.jsx'
+      - '**/*.mjs'
+      - '**/*.cjs'
+      - '**/*.ts'
+      - '**/*.tsx'
+      - '.github/workflows/codeql.yml'
   schedule:
     # Roda toda segunda-feira às 06:00 UTC, além dos triggers de push/PR.
     # Isso pega vulnerabilidades novas descobertas em padrões que já
