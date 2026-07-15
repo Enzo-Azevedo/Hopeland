@@ -6,9 +6,10 @@ import { PhaserGame } from "@/components/PhaserGame";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { CharacterPortrait } from "@/components/CharacterPortrait";
-import { loadActiveCharacter, saveActiveCharacter, updateActiveCharacter } from "@/lib/character-store";
-import { getActiveCharacter, setCharacterMoodDebug } from "@/lib/character.functions";
+import { clearActiveCharacter, loadActiveCharacter, saveActiveCharacter, updateActiveCharacter } from "@/lib/character-store";
+import { getActiveCharacter, setCharacterMoodDebug, setPlayedSecondsDebug } from "@/lib/character.functions";
 import { useHeartbeat } from "@/lib/use-heartbeat";
+import { ageStage, isDeadByAge, stageLabel } from "@/lib/age-stage";
 import type { PersistedCharacter } from "@/lib/character-row";
 
 const DEV = import.meta.env.DEV;
@@ -29,6 +30,7 @@ function GamePage() {
   const [email, setEmail] = useState<string | null>(null);
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
   const [character, setCharacter] = useState<PersistedCharacter | null>(null);
+  const [dead, setDead] = useState(false);
 
   useEffect(() => {
     supabase.auth.getSession()
@@ -62,6 +64,8 @@ function GamePage() {
         }
         saveActiveCharacter(fresh);
         setCharacter(fresh);
+        // Defensive: a stale cache may miss a death from the previous session's last tick.
+        if (isDeadByAge(fresh.playedSeconds)) setDead(true);
       })
       .catch((error) => {
         console.error("[characters] load failed:", error);
@@ -70,7 +74,8 @@ function GamePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [navigate]);
 
-  useHeartbeat(character !== null);
+  useHeartbeat(character !== null && !dead, () => setDead(true));
+  const stage = character ? ageStage(character.playedSeconds) : "y";
 
   const handlePosition = useCallback((x: number, y: number) => {
     setPos({ x, y });
@@ -91,6 +96,34 @@ function GamePage() {
     }
   };
 
+  const setPlayedFn = useServerFn(setPlayedSecondsDebug);
+  const handleStageJump = async (seconds: number) => {
+    try {
+      const { playedSeconds } = await setPlayedFn({ data: { seconds } });
+      const next = updateActiveCharacter({ playedSeconds });
+      if (next) setCharacter(next);
+    } catch { /* debug only */ }
+  };
+
+  if (dead && character) {
+    const hours = Math.floor(character.playedSeconds / 3600);
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background px-4">
+        <Card className="max-w-md p-8 text-center space-y-4">
+          <p className="text-sm uppercase tracking-widest text-primary">O tempo venceu</p>
+          <h1 className="font-display text-3xl font-bold">{character.name}</h1>
+          <p className="text-sm text-muted-foreground">
+            Viveu {hours} horas em Hopeland, de criança a idoso. Sua história termina aqui —
+            mas outra pode começar.
+          </p>
+          <Button size="lg" onClick={() => { clearActiveCharacter(); navigate({ to: "/character-creation" }); }}>
+            Criar novo personagem
+          </Button>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="relative w-screen h-screen overflow-hidden bg-black">
       <PhaserGame onPositionChange={handlePosition} />
@@ -100,6 +133,9 @@ function GamePage() {
         <div><span className="text-muted-foreground">Conta:</span> {email ?? "—"}</div>
         {character?.name && (
           <div><span className="text-muted-foreground">Personagem:</span> {character.name}</div>
+        )}
+        {character && (
+          <div><span className="text-muted-foreground">Idade:</span> {stageLabel(stage)}</div>
         )}
         {pos && (
           <div className="text-muted-foreground">
@@ -117,6 +153,7 @@ function GamePage() {
               appearance={character.appearance}
               mood={character.mood}
               size={96}
+              ageStage={stage}
               label={`Retrato de ${character.name ?? "personagem"}`}
             />
             <div className="mt-1 text-center text-[11px] font-medium">
@@ -137,6 +174,17 @@ function GamePage() {
               />
               <div className="flex justify-between text-[10px] text-muted-foreground">
                 <span>triste</span><span>neutro</span><span>animado</span>
+              </div>
+              <div className="flex flex-wrap gap-1 pt-1">
+                {([["c", 0], ["t", 8 * 3600], ["y", 24 * 3600], ["m", 84 * 3600], ["e", 234 * 3600], ["morte", 284 * 3600 - 60]] as const).map(([label, secs]) => (
+                  <button
+                    key={label}
+                    className="rounded border px-1 text-[10px] hover:bg-primary/10"
+                    onClick={() => handleStageJump(secs)}
+                  >
+                    {label}
+                  </button>
+                ))}
               </div>
             </Card>
           )}

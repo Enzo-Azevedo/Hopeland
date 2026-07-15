@@ -70,7 +70,7 @@ export type Database = {
     Functions: {
       heartbeat_tick: {
         Args: Record<PropertyKey, never>
-        Returns: { played_seconds: number }[]
+        Returns: { played_seconds: number; died: boolean }[]
       }
     }
     Enums: {
