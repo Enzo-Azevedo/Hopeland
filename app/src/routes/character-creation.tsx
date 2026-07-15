@@ -76,9 +76,14 @@ function CharacterCreationPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      if (!data.session) navigate({ to: "/auth" });
-    });
+    supabase.auth.getSession()
+      .then(({ data }) => {
+        if (!data.session) navigate({ to: "/auth" });
+      })
+      .catch((error) => {
+        console.error("[auth] session check failed:", error);
+        navigate({ to: "/auth" });
+      });
   }, [navigate]);
 
   const submit = async (

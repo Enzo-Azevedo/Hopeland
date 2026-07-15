@@ -30,13 +30,18 @@ function GamePage() {
   const [character, setCharacter] = useState<Character | null>(null);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      if (!data.session) {
+    supabase.auth.getSession()
+      .then(({ data }) => {
+        if (!data.session) {
+          navigate({ to: "/auth" });
+          return;
+        }
+        setEmail(data.session.user.email ?? null);
+      })
+      .catch((error) => {
+        console.error("[auth] session check failed:", error);
         navigate({ to: "/auth" });
-        return;
-      }
-      setEmail(data.session.user.email ?? null);
-    });
+      });
 
     const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {
       if (!session) navigate({ to: "/auth" });
