@@ -9,6 +9,7 @@ import { Loader2 } from "lucide-react";
 import { createCharacter } from "@/lib/character.functions";
 import type { Category, Character, Origin, Profession } from "@/lib/character-schema";
 import { CharacterPortrait } from "@/components/CharacterPortrait";
+import { loadManifest, preloadPortrait } from "@/components/portrait/composite";
 import { saveActiveCharacter } from "@/lib/character-store";
 
 const DEV = import.meta.env.DEV;
@@ -77,6 +78,13 @@ function CharacterCreationPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Warm the portrait manifest as soon as the flow opens; the layer images
+  // are preloaded right after the character is forged (see submit), so the
+  // reveal step renders instantly.
+  useEffect(() => {
+    loadManifest().catch(() => {});
+  }, []);
+
   useEffect(() => {
     supabase.auth.getSession()
       .then(({ data }) => {
@@ -101,6 +109,7 @@ function CharacterCreationPage() {
       const c = await forge({ data: { category: cat, profession: prof, origin: ori, name, gender } });
       log("submit:ok");
       setCharacter(c as Character);
+      preloadPortrait((c as Character).appearance);
     } catch (e) {
       const message = e instanceof Error ? e.message : "Falha ao criar personagem.";
       log("submit:error", message);

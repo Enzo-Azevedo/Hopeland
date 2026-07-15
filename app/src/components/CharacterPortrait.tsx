@@ -36,7 +36,9 @@ export function CharacterPortrait({ appearance, mood, size = 192, className, lab
       return;
     }
 
-    drawFallbackPortrait(canvas, appearance, mood); // placeholder while layers load
+    // No placeholder while loading: the canvas stays transparent until the
+    // real layers land (preloading in the creation flow makes this instant).
+    // The geometric fallback is reserved for legacy characters and errors.
     loadManifest()
       .then((manifest) => {
         if (cancelled) return;
