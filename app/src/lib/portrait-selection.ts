@@ -51,6 +51,11 @@ const NECK_BY_BUILD: Record<Appearance["build"], string> = {
   slim: "thin", average: "average", sturdy: "heavy", robust: "hulk",
 };
 
+// Garments come in four sizes matching the neck/build tiers.
+const CLOTHES_SIZE_BY_BUILD: Record<Appearance["build"], string> = {
+  slim: "s", average: "m", sturdy: "l", robust: "xl",
+};
+
 function pick<T>(rand: () => number, arr: T[]): T {
   return arr[Math.floor(rand() * arr.length)];
 }
@@ -81,7 +86,7 @@ export function selectPortraitLayers(
 
   const wanted: Record<string, string | null> = {
     neck: `${gender}-${NECK_BY_BUILD[appearance.build]}`,
-    clothes: appearance.clothes,
+    clothes: `${appearance.clothes}-${CLOTHES_SIZE_BY_BUILD[appearance.build]}`,
     head: `${gender}-${headShape}`,
     "face-inner": `${gender}-${bucket}-${faceBucketVariant[bucket]}`,
     "face-outer": `${gender}-${bucket}-${faceBucketVariant[bucket]}`,
