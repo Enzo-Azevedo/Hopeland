@@ -167,6 +167,17 @@ function CharacterCreationPage() {
             />
           )}
         </div>
+        <p className="mt-16 text-center text-xs text-muted-foreground">
+          Arte do retrato:{" "}
+          <a
+            href="https://www.nexusmods.com/rimworld/mods/425"
+            target="_blank"
+            rel="noreferrer"
+            className="underline underline-offset-2 hover:text-foreground"
+          >
+            TwoPenny — Portraits of the Rim
+          </a>
+        </p>
       </div>
     </div>
   );
