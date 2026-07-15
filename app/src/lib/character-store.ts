@@ -1,28 +1,27 @@
-import type { Character } from "./character-schema";
+import type { PersistedCharacter } from "./character-row";
 
-// Lightweight session store for the active character. The authoritative
-// persistence layer will land with the real /backend world server; until
-// then we keep the active character in sessionStorage so the naming step,
-// the HUD portrait, and future in-game screens can share the same object.
+// sessionStorage CACHE of the active character. Supabase is the source of
+// truth (see character.functions.ts); this only bridges instant paints
+// between routes while the fresh row is fetched.
 
 const KEY = "hopeland.activeCharacter";
 
-export function saveActiveCharacter(c: Character) {
+export function saveActiveCharacter(c: PersistedCharacter) {
   try { sessionStorage.setItem(KEY, JSON.stringify(c)); } catch { /* ignore */ }
 }
 
-export function loadActiveCharacter(): Character | null {
+export function loadActiveCharacter(): PersistedCharacter | null {
   try {
     const raw = sessionStorage.getItem(KEY);
     if (!raw) return null;
-    return JSON.parse(raw) as Character;
+    return JSON.parse(raw) as PersistedCharacter;
   } catch { return null; }
 }
 
-export function updateActiveCharacter(patch: Partial<Character>): Character | null {
+export function updateActiveCharacter(patch: Partial<PersistedCharacter>): PersistedCharacter | null {
   const current = loadActiveCharacter();
   if (!current) return null;
-  const next = { ...current, ...patch } as Character;
+  const next = { ...current, ...patch } as PersistedCharacter;
   saveActiveCharacter(next);
   return next;
 }

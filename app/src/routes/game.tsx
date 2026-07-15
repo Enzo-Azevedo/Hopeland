@@ -6,9 +6,10 @@ import { PhaserGame } from "@/components/PhaserGame";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { CharacterPortrait } from "@/components/CharacterPortrait";
-import { loadActiveCharacter, updateActiveCharacter } from "@/lib/character-store";
-import { setCharacterMoodDebug } from "@/lib/character.functions";
-import type { Character } from "@/lib/character-schema";
+import { loadActiveCharacter, saveActiveCharacter, updateActiveCharacter } from "@/lib/character-store";
+import { getActiveCharacter, setCharacterMoodDebug } from "@/lib/character.functions";
+import { useHeartbeat } from "@/lib/use-heartbeat";
+import type { PersistedCharacter } from "@/lib/character-row";
 
 const DEV = import.meta.env.DEV;
 
@@ -27,7 +28,7 @@ function GamePage() {
   const setMoodFn = useServerFn(setCharacterMoodDebug);
   const [email, setEmail] = useState<string | null>(null);
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
-  const [character, setCharacter] = useState<Character | null>(null);
+  const [character, setCharacter] = useState<PersistedCharacter | null>(null);
 
   useEffect(() => {
     supabase.auth.getSession()
@@ -49,14 +50,27 @@ function GamePage() {
     return () => sub.subscription.unsubscribe();
   }, [navigate]);
 
+  const fetchActive = useServerFn(getActiveCharacter);
   useEffect(() => {
-    const c = loadActiveCharacter();
-    if (!c || !c.name) {
-      navigate({ to: "/character-creation" });
-      return;
-    }
-    setCharacter(c);
+    const cached = loadActiveCharacter();
+    if (cached?.name) setCharacter(cached);
+    fetchActive()
+      .then((fresh) => {
+        if (!fresh) {
+          navigate({ to: "/character-creation" });
+          return;
+        }
+        saveActiveCharacter(fresh);
+        setCharacter(fresh);
+      })
+      .catch((error) => {
+        console.error("[characters] load failed:", error);
+        if (!cached?.name) navigate({ to: "/character-creation" });
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [navigate]);
+
+  useHeartbeat(character !== null);
 
   const handlePosition = useCallback((x: number, y: number) => {
     setPos({ x, y });

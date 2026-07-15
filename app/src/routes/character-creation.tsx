@@ -6,7 +6,8 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Loader2 } from "lucide-react";
-import { createCharacter } from "@/lib/character.functions";
+import { createCharacter, getActiveCharacter } from "@/lib/character.functions";
+import type { PersistedCharacter } from "@/lib/character-row";
 import type { Category, Character, Origin, Profession } from "@/lib/character-schema";
 import { CharacterPortrait } from "@/components/CharacterPortrait";
 import { loadManifest, preloadPortrait } from "@/components/portrait/composite";
@@ -74,7 +75,7 @@ function CharacterCreationPage() {
   const [category, setCategory] = useState<Category | null>(null);
   const [profession, setProfession] = useState<Profession | null>(null);
   const [origin, setOrigin] = useState<Origin | null>(null);
-  const [character, setCharacter] = useState<Character | null>(null);
+  const [character, setCharacter] = useState<PersistedCharacter | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -83,6 +84,17 @@ function CharacterCreationPage() {
   // reveal step renders instantly.
   useEffect(() => {
     loadManifest().catch(() => {});
+  }, []);
+
+  // Alive character already exists -> this page is off-limits.
+  const fetchActive = useServerFn(getActiveCharacter);
+  useEffect(() => {
+    fetchActive()
+      .then((existing) => {
+        if (existing) navigate({ to: "/game" });
+      })
+      .catch(() => { /* sem bloqueio: a criação segue e o insert é a barreira real */ });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -108,8 +120,8 @@ function CharacterCreationPage() {
     try {
       const c = await forge({ data: { category: cat, profession: prof, origin: ori, name, gender } });
       log("submit:ok");
-      setCharacter(c as Character);
-      preloadPortrait((c as Character).appearance);
+      setCharacter(c as PersistedCharacter);
+      preloadPortrait((c as PersistedCharacter).appearance);
     } catch (e) {
       const message = e instanceof Error ? e.message : "Falha ao criar personagem.";
       log("submit:error", message);
@@ -261,7 +273,7 @@ function Question({
 function SummaryView({
   character, submitting, error, onContinue, onRestart, onRetry,
 }: {
-  character: Character | null; submitting: boolean;
+  character: PersistedCharacter | null; submitting: boolean;
   error: string | null; onContinue: () => void; onRestart: () => void; onRetry: () => void;
 }) {
   const categoryLabels = useMemo(() => ({
@@ -409,7 +421,7 @@ function IdentityStep({
 function RevealView({
   character, onEnter, onBack,
 }: {
-  character: Character;
+  character: PersistedCharacter;
   onEnter: () => void;
   onBack: () => void;
 }) {

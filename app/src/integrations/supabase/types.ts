@@ -12,13 +12,66 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      characters: {
+        Row: {
+          id: string
+          user_id: string
+          name: string
+          gender: string
+          choices: Json
+          skills: Json
+          tags: Json
+          passives: Json
+          appearance: Json
+          mood: number
+          played_seconds: number
+          last_tick_at: string | null
+          created_at: string
+          died_at: string | null
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          name: string
+          gender: string
+          choices: Json
+          skills: Json
+          tags?: Json
+          passives?: Json
+          appearance: Json
+          mood?: number
+          played_seconds?: number
+          last_tick_at?: string | null
+          created_at?: string
+          died_at?: string | null
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          name?: string
+          gender?: string
+          choices?: Json
+          skills?: Json
+          tags?: Json
+          passives?: Json
+          appearance?: Json
+          mood?: number
+          played_seconds?: number
+          last_tick_at?: string | null
+          created_at?: string
+          died_at?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      heartbeat_tick: {
+        Args: Record<PropertyKey, never>
+        Returns: { played_seconds: number }[]
+      }
     }
     Enums: {
       [_ in never]: never
