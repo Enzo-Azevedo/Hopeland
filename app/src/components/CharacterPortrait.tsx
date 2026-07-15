@@ -21,6 +21,14 @@ export function CharacterPortrait({ appearance, mood, size = 192, className, lab
     if (!canvas) return;
     let cancelled = false;
 
+    // Render the canvas backing store at device-pixel resolution while
+    // keeping CSS size at `size` (see style prop below), so portraits stay
+    // sharp on high-DPI screens. Set imperatively (not via JSX width/height)
+    // to avoid an SSR/client hydration mismatch on devicePixelRatio.
+    const dpr = typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1;
+    canvas.width = size * dpr;
+    canvas.height = size * dpr;
+
     // Legacy characters created before the seed field exist in
     // sessionStorage; they keep the geometric portrait.
     if (typeof appearance.seed !== "number") {
@@ -47,6 +55,7 @@ export function CharacterPortrait({ appearance, mood, size = 192, className, lab
       ref={canvasRef}
       width={size}
       height={size}
+      style={{ width: size, height: size }}
       className={className}
       role="img"
       aria-label={label ?? "Retrato do personagem"}

@@ -32,9 +32,9 @@ export interface Appearance {
   skinTone: SkinTone;
   facialMark: FacialMark;
   build: Build;
-  seed: number;          // u32; sole randomness source for portrait layers
-  gender: "f" | "m";     // = genderFromSeed(seed); stored for future explicit choice
-  clothes: Profession;   // 1:1 with profession, resolved via the portrait manifest
+  seed?: number;          // u32; sole randomness source for portrait layers. Optional: legacy sessionStorage characters predate this field.
+  gender?: "f" | "m";     // = genderFromSeed(seed); stored for future explicit choice. Optional: legacy characters predate this field.
+  clothes?: Profession;   // 1:1 with profession, resolved via the portrait manifest. Optional: legacy characters predate this field.
   hair: "placeholder_default";
   scars: "placeholder_none";
 }

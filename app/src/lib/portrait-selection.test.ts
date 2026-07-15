@@ -64,7 +64,9 @@ describe("selectPortraitLayers", () => {
 describe("buildCharacter appearance", () => {
   test("fills seed and matching gender", () => {
     const c = buildCharacter({ category: "agil", profession: "pescador", origin: "mar" });
-    expect(Number.isInteger(c.appearance.seed)).toBe(true);
-    expect(c.appearance.gender).toBe(genderFromSeed(c.appearance.seed));
+    const { seed, gender } = c.appearance;
+    expect(Number.isInteger(seed)).toBe(true);
+    if (typeof seed !== "number") throw new Error("expected buildCharacter to set a numeric seed");
+    expect(gender).toBe(genderFromSeed(seed));
   });
 });

@@ -60,6 +60,9 @@ export function selectPortraitLayers(
   mood: number,
   manifest: PortraitManifest,
 ): SelectedLayer[] {
+  if (typeof appearance.seed !== "number" || !appearance.clothes) {
+    throw new Error("portrait selection requires appearance.seed and appearance.clothes (legacy character?)");
+  }
   const rand = mulberry32(appearance.seed);
   // Draw order contract (see header). Gender is draw #1 so it always
   // matches genderFromSeed(seed).
@@ -78,7 +81,6 @@ export function selectPortraitLayers(
     neck: `${gender}-${NECK_BY_BUILD[appearance.build]}`,
     clothes: appearance.clothes,
     head: `${gender}-${headShape}`,
-    face: `${gender}-${bucket}-${faceBucketVariant[bucket]}`,
     "face-inner": `${gender}-${bucket}-${faceBucketVariant[bucket]}`,
     "face-outer": `${gender}-${bucket}-${faceBucketVariant[bucket]}`,
     beard: gender === "m" && hasBeard ? beardVariant : null,
