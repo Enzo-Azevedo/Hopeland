@@ -19,23 +19,19 @@ const ORIGINS: Origin[] = ["praia", "montanha", "deserto", "floresta", "cavernas
 
 export const createCharacter = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: { category: Category; profession: Profession; origin: Origin }) => {
+  .inputValidator((input: {
+    category: Category; profession: Profession; origin: Origin;
+    name: string; gender: "f" | "m";
+  }) => {
     if (!CATEGORIES.includes(input.category)) throw new Error("Categoria inválida.");
     if (!PROFESSIONS.includes(input.profession)) throw new Error("Profissão inválida.");
     if (!ORIGINS.includes(input.origin)) throw new Error("Origem inválida.");
-    return input;
+    if (input.gender !== "f" && input.gender !== "m") throw new Error("Gênero inválido.");
+    return { ...input, name: validateCharacterName(input.name) };
   })
   .handler(async ({ data }) => {
     return buildCharacter(data);
   });
-
-export const finalizeCharacterName = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
-  .inputValidator((input: { name: string }) => {
-    if (typeof input?.name !== "string") throw new Error("Nome inválido.");
-    return { name: validateCharacterName(input.name) };
-  })
-  .handler(async ({ data }) => ({ name: data.name }));
 
 export const setCharacterMoodDebug = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])

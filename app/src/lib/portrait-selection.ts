@@ -64,9 +64,11 @@ export function selectPortraitLayers(
     throw new Error("portrait selection requires appearance.seed and appearance.clothes (legacy character?)");
   }
   const rand = mulberry32(appearance.seed);
-  // Draw order contract (see header). Gender is draw #1 so it always
-  // matches genderFromSeed(seed).
-  const gender = rand() < 0.5 ? "f" : "m";
+  // Draw order contract (see header). Draw #1 is still consumed to keep the
+  // sequence stable, but an explicit appearance.gender (chosen by the player
+  // at creation) wins over the seed-derived one.
+  const derivedGender = rand() < 0.5 ? "f" : "m";
+  const gender = appearance.gender ?? derivedGender;
   const headShape = pick(rand, HEAD_SHAPES);
   const hairVariant = pick(rand, Object.keys(manifest.layers.hair.variants));
   const hairColor = pick(rand, HAIR_COLORS);
