@@ -1,7 +1,6 @@
 // Client-mirror of backend character logic. Keep in sync with
 // backend/src/character/skills.ts (backend is gitignored, local-only).
 
-import { genderFromSeed } from "./portrait-selection";
 
 export type Category = "fisica" | "intelectual" | "agil" | "social";
 export type Profession =
@@ -33,7 +32,7 @@ export interface Appearance {
   facialMark: FacialMark;
   build: Build;
   seed?: number;          // u32; sole randomness source for portrait layers. Optional: legacy sessionStorage characters predate this field.
-  gender?: "f" | "m";     // = genderFromSeed(seed); stored for future explicit choice. Optional: legacy characters predate this field.
+  gender?: "f" | "m";     // chosen by the player at creation; portrait layers follow it. Optional: legacy characters predate this field.
   clothes?: Profession;   // 1:1 with profession, resolved via the portrait manifest. Optional: legacy characters predate this field.
   hair: "placeholder_default";
   scars: "placeholder_none";
@@ -148,7 +147,9 @@ export function moodExpression(mood: number): MoodExpression {
 
 export function buildCharacter(input: {
   category: Category; profession: Profession; origin: Origin;
+  name: string; gender: "f" | "m";
 }): Character {
+  const name = validateCharacterName(input.name);
   const skills = empty();
   for (const k of Object.keys(skills[input.category])) add(skills, [input.category, k], 1);
   add(skills, PROFESSION_SKILL[input.profession], 1);
@@ -162,7 +163,7 @@ export function buildCharacter(input: {
     facialMark: appearanceBase.facialMark,
     build: buildFromPhysical(skills.fisica),
     seed,
-    gender: genderFromSeed(seed),
+    gender: input.gender,
     clothes: input.profession,
     hair: "placeholder_default",
     scars: "placeholder_none",
@@ -172,10 +173,10 @@ export function buildCharacter(input: {
     skills,
     tags: [...o.tags],
     passives: [...o.passives],
-    choices: input,
+    choices: { category: input.category, profession: input.profession, origin: input.origin },
     appearance,
     mood: 50,
-    name: null,
+    name,
   };
 }
 

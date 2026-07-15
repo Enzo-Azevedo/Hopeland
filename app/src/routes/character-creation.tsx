@@ -6,7 +6,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Loader2 } from "lucide-react";
-import { createCharacter, finalizeCharacterName } from "@/lib/character.functions";
+import { createCharacter } from "@/lib/character.functions";
 import type { Category, Character, Origin, Profession } from "@/lib/character-schema";
 import { CharacterPortrait } from "@/components/CharacterPortrait";
 import { saveActiveCharacter } from "@/lib/character-store";
@@ -67,7 +67,9 @@ const SKILL_LABEL: Record<string, string> = {
 function CharacterCreationPage() {
   const navigate = useNavigate();
   const forge = useServerFn(createCharacter);
-  const [step, setStep] = useState<0 | 1 | 2 | 3 | 4>(0);
+  const [step, setStep] = useState<0 | 1 | 2 | 3 | 4 | 5>(0);
+  const [name, setName] = useState("");
+  const [gender, setGender] = useState<"f" | "m" | null>(null);
   const [category, setCategory] = useState<Category | null>(null);
   const [profession, setProfession] = useState<Profession | null>(null);
   const [origin, setOrigin] = useState<Origin | null>(null);
@@ -91,12 +93,12 @@ function CharacterCreationPage() {
     prof: Profession = profession!,
     ori: Origin = origin!,
   ) => {
-    if (!cat || !prof || !ori) return;
+    if (!cat || !prof || !ori || !gender || name.trim().length < 2) return;
     setSubmitting(true);
     setError(null);
-    log("submit:call", { cat, prof, ori });
+    log("submit:call", { cat, prof, ori, gender });
     try {
-      const c = await forge({ data: { category: cat, profession: prof, origin: ori } });
+      const c = await forge({ data: { category: cat, profession: prof, origin: ori, name, gender } });
       log("submit:ok");
       setCharacter(c as Character);
     } catch (e) {
@@ -117,25 +119,34 @@ function CharacterCreationPage() {
         <StepIndicator step={step} />
         <div key={step} className="mt-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
           {step === 0 && (
+            <IdentityStep
+              name={name}
+              gender={gender}
+              onName={setName}
+              onGender={setGender}
+              onContinue={() => setStep(1)}
+            />
+          )}
+          {step === 1 && (
             <Question
               intro="Antes de tudo, quem você sempre foi?"
               prompt="Feche os olhos por um segundo e pense na versão de você que sobreviveu até aqui. Que tipo de pessoa ela sempre foi?"
               options={CATEGORY_OPTIONS}
               selected={category}
-              onPick={(id) => { setCategory(id as Category); setTimeout(() => setStep(1), 250); }}
+              onPick={(id) => { setCategory(id as Category); setTimeout(() => setStep(2), 250); }}
             />
           )}
-          {step === 1 && (
+          {step === 2 && (
             <Question
               intro="E se o mundo deixasse..."
               prompt='"Se eu pudesse, gostaria de ser um..."'
               options={PROFESSION_OPTIONS}
               selected={profession}
-              onPick={(id) => { setProfession(id as Profession); setTimeout(() => setStep(2), 250); }}
+              onPick={(id) => { setProfession(id as Profession); setTimeout(() => setStep(3), 250); }}
               columns={3}
             />
           )}
-          {step === 2 && (
+          {step === 3 && (
             <Question
               intro="Um lugar pra chamar de seu."
               prompt='"Este definitivamente seria um ótimo lugar para viver..."'
@@ -145,30 +156,30 @@ function CharacterCreationPage() {
                 const ori = id as Origin;
                 setOrigin(ori);
                 setTimeout(() => {
-                  setStep(3);
+                  setStep(4);
                   submit(category!, profession!, ori);
                 }, 250);
               }}
             />
           )}
-          {step === 3 && (
+          {step === 4 && (
             <SummaryView
               character={character}
               submitting={submitting}
               error={error}
-              onContinue={() => setStep(4)}
-              onRestart={() => { setStep(0); setCategory(null); setProfession(null); setOrigin(null); setCharacter(null); setError(null); setSubmitting(false); }}
+              onContinue={() => setStep(5)}
+              onRestart={() => { setStep(0); setName(""); setGender(null); setCategory(null); setProfession(null); setOrigin(null); setCharacter(null); setError(null); setSubmitting(false); }}
               onRetry={retry}
             />
           )}
-          {step === 4 && character && (
-            <NamingView
+          {step === 5 && character && (
+            <RevealView
               character={character}
-              onDone={(named) => {
-                saveActiveCharacter(named);
+              onEnter={() => {
+                saveActiveCharacter(character);
                 navigate({ to: "/game" });
               }}
-              onBack={() => setStep(3)}
+              onBack={() => setStep(4)}
             />
           )}
         </div>
@@ -189,7 +200,7 @@ function CharacterCreationPage() {
 }
 
 function StepIndicator({ step }: { step: number }) {
-  const labels = ["Origem interior", "Vocação", "Terra natal", "Resumo", "Nome"];
+  const labels = ["Identidade", "Origem interior", "Vocação", "Terra natal", "Resumo", "Revelação"];
   return (
     <div className="flex items-center gap-3 text-xs text-muted-foreground">
       {labels.map((l, i) => (
@@ -335,36 +346,69 @@ function SummaryView({
   );
 }
 
-function NamingView({
-  character, onDone, onBack,
+function IdentityStep({
+  name, gender, onName, onGender, onContinue,
+}: {
+  name: string;
+  gender: "f" | "m" | null;
+  onName: (v: string) => void;
+  onGender: (g: "f" | "m") => void;
+  onContinue: () => void;
+}) {
+  const ready = name.trim().length >= 2 && gender !== null;
+
+  return (
+    <div>
+      <p className="text-sm uppercase tracking-widest text-primary">Toda história começa por alguém</p>
+      <h1 className="mt-3 font-display text-3xl sm:text-4xl font-bold leading-tight">Quem é você?</h1>
+
+      <div className="mt-8 max-w-sm space-y-3">
+        <label htmlFor="char-name" className="text-sm font-medium">Nome do personagem</label>
+        <Input
+          id="char-name"
+          value={name}
+          onChange={(e) => onName(e.target.value)}
+          maxLength={20}
+          placeholder="Entre 2 e 20 caracteres"
+          onKeyDown={(e) => { if (e.key === "Enter" && ready) onContinue(); }}
+          autoFocus
+        />
+      </div>
+
+      <div className="mt-6 grid max-w-sm grid-cols-2 gap-3">
+        {([
+          { id: "m", label: "Masculino" },
+          { id: "f", label: "Feminino" },
+        ] as const).map((g) => (
+          <Card
+            key={g.id}
+            onClick={() => onGender(g.id)}
+            className={`cursor-pointer p-4 text-center font-semibold transition-all hover:border-primary hover:bg-primary/5 ${gender === g.id ? "border-primary bg-primary/10 ring-2 ring-primary" : ""}`}
+          >
+            {g.label}
+          </Card>
+        ))}
+      </div>
+
+      <div className="mt-8">
+        <Button size="lg" onClick={onContinue} disabled={!ready}>Continuar</Button>
+      </div>
+    </div>
+  );
+}
+
+function RevealView({
+  character, onEnter, onBack,
 }: {
   character: Character;
-  onDone: (named: Character) => void;
+  onEnter: () => void;
   onBack: () => void;
 }) {
-  const nameFn = useServerFn(finalizeCharacterName);
-  const [name, setName] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-
-  const confirm = async () => {
-    setError(null);
-    setSaving(true);
-    try {
-      const { name: validated } = await nameFn({ data: { name } });
-      onDone({ ...character, name: validated });
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Nome inválido.");
-    } finally {
-      setSaving(false);
-    }
-  };
-
   return (
     <div className="space-y-6 text-center">
       <div>
         <p className="text-sm uppercase tracking-widest text-primary">Você acaba de ser forjado</p>
-        <h1 className="mt-2 font-display text-3xl sm:text-4xl font-bold">Como o mundo vai te chamar?</h1>
+        <h1 className="mt-2 font-display text-3xl sm:text-4xl font-bold">{character.name}</h1>
       </div>
 
       <div className="flex justify-center">
@@ -376,26 +420,9 @@ function NamingView({
         />
       </div>
 
-      <div className="mx-auto max-w-sm space-y-3 text-left">
-        <label htmlFor="char-name" className="text-sm font-medium">Nome do personagem</label>
-        <Input
-          id="char-name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          maxLength={20}
-          placeholder="Entre 2 e 20 caracteres"
-          onKeyDown={(e) => { if (e.key === "Enter") confirm(); }}
-          autoFocus
-        />
-        {error && <p className="text-sm text-destructive">{error}</p>}
-      </div>
-
       <div className="flex flex-wrap justify-center gap-3 pt-2">
-        <Button size="lg" onClick={confirm} disabled={saving || name.trim().length < 2}>
-          {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-          Entrar no mundo
-        </Button>
-        <Button size="lg" variant="ghost" onClick={onBack} disabled={saving}>Voltar ao resumo</Button>
+        <Button size="lg" onClick={onEnter}>Entrar no mundo</Button>
+        <Button size="lg" variant="ghost" onClick={onBack}>Voltar ao resumo</Button>
       </div>
     </div>
   );
