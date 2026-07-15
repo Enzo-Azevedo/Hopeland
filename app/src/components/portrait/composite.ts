@@ -7,6 +7,7 @@ import {
   type SelectedLayer,
 } from "@/lib/portrait-selection";
 import type { Appearance } from "@/lib/character-schema";
+import type { AgeStage } from "@/lib/age-stage";
 
 let manifestPromise: Promise<PortraitManifest> | null = null;
 
@@ -59,12 +60,12 @@ function tinted(img: HTMLImageElement, color: string): HTMLCanvasElement {
  * only the face layer differs between them. Fire-and-forget: failures are
  * swallowed here and surface on the actual render, which has a fallback.
  */
-export function preloadPortrait(appearance: Appearance): void {
+export function preloadPortrait(appearance: Appearance, stage: AgeStage = "y"): void {
   if (typeof window === "undefined" || typeof appearance.seed !== "number") return;
   loadManifest()
     .then((manifest) => {
       for (const mood of [10, 50, 90]) {
-        for (const layer of selectPortraitLayers(appearance, mood, manifest)) {
+        for (const layer of selectPortraitLayers(appearance, mood, manifest, stage)) {
           loadImage(layer.url).catch(() => {});
         }
       }

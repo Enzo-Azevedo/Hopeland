@@ -1,6 +1,7 @@
 // app/src/components/CharacterPortrait.tsx
 import { useEffect, useRef } from "react";
 import type { Appearance } from "@/lib/character-schema";
+import type { AgeStage } from "@/lib/age-stage";
 import { selectPortraitLayers } from "@/lib/portrait-selection";
 import { compositePortrait, loadManifest } from "./portrait/composite";
 import { drawFallbackPortrait } from "./portrait/fallback";
@@ -11,9 +12,10 @@ export interface CharacterPortraitProps {
   size?: number;
   className?: string;
   label?: string;
+  ageStage?: AgeStage;
 }
 
-export function CharacterPortrait({ appearance, mood, size = 192, className, label }: CharacterPortraitProps) {
+export function CharacterPortrait({ appearance, mood, size = 192, className, label, ageStage = "y" }: CharacterPortraitProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -42,7 +44,7 @@ export function CharacterPortrait({ appearance, mood, size = 192, className, lab
     loadManifest()
       .then((manifest) => {
         if (cancelled) return;
-        return compositePortrait(canvas, selectPortraitLayers(appearance, mood, manifest), () => cancelled);
+        return compositePortrait(canvas, selectPortraitLayers(appearance, mood, manifest, ageStage), () => cancelled);
       })
       .catch((error) => {
         console.error("[portrait] falling back to geometric render:", error);
@@ -50,7 +52,7 @@ export function CharacterPortrait({ appearance, mood, size = 192, className, lab
       });
 
     return () => { cancelled = true; };
-  }, [appearance, mood, size]);
+  }, [appearance, mood, size, ageStage]);
 
   return (
     <canvas

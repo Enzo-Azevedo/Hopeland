@@ -121,7 +121,7 @@ function CharacterCreationPage() {
       const c = await forge({ data: { category: cat, profession: prof, origin: ori, name, gender } });
       log("submit:ok");
       setCharacter(c as PersistedCharacter);
-      preloadPortrait((c as PersistedCharacter).appearance);
+      preloadPortrait((c as PersistedCharacter).appearance, "c");
     } catch (e) {
       const message = e instanceof Error ? e.message : "Falha ao criar personagem.";
       log("submit:error", message);
@@ -437,6 +437,7 @@ function RevealView({
           appearance={character.appearance}
           mood={character.mood}
           size={288}
+          ageStage="c"
           className="rounded-xl border border-border bg-muted/30 shadow-lg"
         />
       </div>

@@ -73,7 +73,23 @@ export const heartbeat = createServerFn({ method: "POST" })
       throw new Error("heartbeat failed");
     }
     const row = data?.[0];
-    return row ? { playedSeconds: row.played_seconds } : null;
+    return row ? { playedSeconds: row.played_seconds, dead: row.died } : null;
+  });
+
+export const setPlayedSecondsDebug = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { seconds: number }) => {
+    const n = Number(input?.seconds);
+    if (!Number.isFinite(n) || n < 0) throw new Error("Segundos inválidos.");
+    return { seconds: Math.round(n) };
+  })
+  .handler(async ({ data, context }) => {
+    const { error } = await context.supabase
+      .from("characters")
+      .update({ played_seconds: data.seconds })
+      .is("died_at", null);
+    if (error) console.error("[characters] debug playtime failed:", error);
+    return { playedSeconds: data.seconds };
   });
 
 export const setCharacterMoodDebug = createServerFn({ method: "POST" })

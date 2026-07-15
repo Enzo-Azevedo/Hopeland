@@ -19,6 +19,17 @@ describe("characters migration", () => {
     expect(sql).toContain("interval '55 seconds'");
     expect(sql).toContain("played_seconds + 60");
   });
+
+  test("death-by-age migration folds death into heartbeat_tick", () => {
+    const death = readFileSync(
+      new URL("../../supabase/migrations/20260716000000_death_by_age.sql", import.meta.url),
+      "utf8",
+    );
+    expect(death).toContain("create or replace function public.heartbeat_tick()");
+    expect(death).toContain("returns table (played_seconds int, died boolean)");
+    expect(death).toContain("1022400");
+    expect(death).toContain("died_at");
+  });
 });
 
 describe("character row serialization", () => {
