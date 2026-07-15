@@ -51,9 +51,14 @@ const NECK_BY_BUILD: Record<Appearance["build"], string> = {
   slim: "thin", average: "average", sturdy: "heavy", robust: "hulk",
 };
 
-// Garments come in four sizes matching the neck/build tiers.
-const CLOTHES_SIZE_BY_BUILD: Record<Appearance["build"], string> = {
-  slim: "s", average: "m", sturdy: "l", robust: "xl",
+// Garment size follows the mod's PawnBodyType matching (Requirements.cs):
+// sizes are gender-specific for adults — female Thin/Standard wear m and
+// Fat/Hulk wear l; male Thin/Standard/Hulk wear l and Fat/Hulk wear xl.
+// Size s is child-only and unused here. Mapping our build tiers onto the
+// mod's body types (thin/average/heavy/hulk):
+const CLOTHES_SIZE_BY_GENDER_BUILD: Record<"f" | "m", Record<Appearance["build"], string>> = {
+  f: { slim: "m", average: "m", sturdy: "l", robust: "l" },
+  m: { slim: "l", average: "l", sturdy: "xl", robust: "xl" },
 };
 
 function pick<T>(rand: () => number, arr: T[]): T {
@@ -86,7 +91,7 @@ export function selectPortraitLayers(
 
   const wanted: Record<string, string | null> = {
     neck: `${gender}-${NECK_BY_BUILD[appearance.build]}`,
-    clothes: `${appearance.clothes}-${CLOTHES_SIZE_BY_BUILD[appearance.build]}`,
+    clothes: `${appearance.clothes}-${CLOTHES_SIZE_BY_GENDER_BUILD[gender][appearance.build]}`,
     head: `${gender}-${headShape}`,
     "face-inner": `${gender}-${bucket}-${faceBucketVariant[bucket]}`,
     "face-outer": `${gender}-${bucket}-${faceBucketVariant[bucket]}`,

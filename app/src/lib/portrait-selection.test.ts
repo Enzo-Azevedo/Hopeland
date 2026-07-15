@@ -4,7 +4,7 @@ import {
   genderFromSeed, mulberry32, selectPortraitLayers,
   type PortraitManifest,
 } from "./portrait-selection";
-import { buildCharacter } from "./character-schema";
+import { buildCharacter, type Category, type Profession } from "./character-schema";
 
 const m = manifest as PortraitManifest;
 
@@ -52,29 +52,42 @@ describe("selectPortraitLayers", () => {
     expect(diff.length).toBeGreaterThan(0);
   });
 
-  test("clothes follow profession and build size", () => {
-    // social category -> zero physical points -> slim build -> size s
-    const slim = buildCharacter({ ...BASE_INPUT, category: "social", profession: "menestrel", origin: "deserto" });
-    expect(selectPortraitLayers(slim.appearance, 50, m).find((l) => l.layer === "clothes")!.url)
-      .toContain("/clothes/menestrel-s.webp");
-    // fisica category + ferreiro -> average build -> size m
-    const avg = buildCharacter({ ...BASE_INPUT, category: "fisica", profession: "ferreiro", origin: "praia" });
-    expect(selectPortraitLayers(avg.appearance, 50, m).find((l) => l.layer === "clothes")!.url)
-      .toContain("/clothes/ferreiro-m.webp");
+  test("clothes size follows the mod's gender+body mapping", () => {
+    // Mod rule (Requirements.cs): adult female Thin/Standard -> m, Fat/Hulk -> l;
+    // adult male Thin/Standard/Hulk -> l, Fat/Hulk -> xl. Sizes never cross gender.
+    const cases: Array<{ category: Category; profession: Profession; gender: "f" | "m"; expected: string }> = [
+      // social -> zero physical points -> slim build
+      { category: "social", profession: "menestrel", gender: "f", expected: "menestrel-m" },
+      { category: "social", profession: "menestrel", gender: "m", expected: "menestrel-l" },
+      // fisica + ferreiro -> average build
+      { category: "fisica", profession: "ferreiro", gender: "f", expected: "ferreiro-m" },
+      { category: "fisica", profession: "ferreiro", gender: "m", expected: "ferreiro-l" },
+    ];
+    for (const c of cases) {
+      const built = buildCharacter({ ...BASE_INPUT, category: c.category, profession: c.profession, origin: "praia", gender: c.gender });
+      const url = selectPortraitLayers(built.appearance, 50, m).find((l) => l.layer === "clothes")!.url;
+      expect(url).toContain(`/clothes/${c.expected}.webp`);
+    }
+    // heavier builds: sturdy/robust female -> l, sturdy/robust male -> xl
+    const heavyF = { ...appearanceWithSeed(1, "f"), build: "sturdy" as const, clothes: "estivador" as const };
+    expect(selectPortraitLayers(heavyF, 50, m).find((l) => l.layer === "clothes")!.url).toContain("estivador-l");
+    const heavyM = { ...appearanceWithSeed(1, "m"), build: "robust" as const, clothes: "estivador" as const };
+    expect(selectPortraitLayers(heavyM, 50, m).find((l) => l.layer === "clothes")!.url).toContain("estivador-xl");
   });
 
-  test("manifest has all 4 clothing sizes for every profession", () => {
+  test("manifest has the 3 adult clothing sizes for every profession (s is child-only)", () => {
     const professions = [
       "ferreiro", "lenhador", "estivador", "bibliotecario", "contador", "alquimista",
       "pescador", "mensageiro", "equilibrista", "comerciante", "menestrel", "taberneiro",
     ];
     const variants = Object.keys(m.layers.clothes.variants);
     for (const p of professions) {
-      for (const size of ["s", "m", "l", "xl"]) {
+      for (const size of ["m", "l", "xl"]) {
         expect(variants).toContain(`${p}-${size}`);
       }
+      expect(variants).not.toContain(`${p}-s`);
     }
-    expect(variants.length).toBe(48);
+    expect(variants.length).toBe(36);
   });
 
   test("explicit gender overrides the seed-derived one for layer keys", () => {
