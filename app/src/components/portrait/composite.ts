@@ -1,7 +1,12 @@
 // app/src/components/portrait/composite.ts
 // Loads and composites portrait layers on a canvas. White mod art is
 // tinted via multiply + destination-in (preserves the layer's alpha).
-import type { PortraitManifest, SelectedLayer } from "@/lib/portrait-selection";
+import {
+  selectPortraitLayers,
+  type PortraitManifest,
+  type SelectedLayer,
+} from "@/lib/portrait-selection";
+import type { Appearance } from "@/lib/character-schema";
 
 let manifestPromise: Promise<PortraitManifest> | null = null;
 
@@ -46,6 +51,25 @@ function tinted(img: HTMLImageElement, color: string): HTMLCanvasElement {
   ctx.globalCompositeOperation = "destination-in";
   ctx.drawImage(img, 0, 0);
   return off;
+}
+
+/**
+ * Warms the manifest and layer-image caches for a character so the first
+ * real render is instant. All three mood buckets are prefetched because
+ * only the face layer differs between them. Fire-and-forget: failures are
+ * swallowed here and surface on the actual render, which has a fallback.
+ */
+export function preloadPortrait(appearance: Appearance): void {
+  if (typeof window === "undefined" || typeof appearance.seed !== "number") return;
+  loadManifest()
+    .then((manifest) => {
+      for (const mood of [10, 50, 90]) {
+        for (const layer of selectPortraitLayers(appearance, mood, manifest)) {
+          loadImage(layer.url).catch(() => {});
+        }
+      }
+    })
+    .catch(() => {});
 }
 
 export async function compositePortrait(
