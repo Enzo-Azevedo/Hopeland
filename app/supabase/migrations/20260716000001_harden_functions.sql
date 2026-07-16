@@ -20,3 +20,6 @@ as $$
 $$;
 
 revoke execute on function public.rls_auto_enable() from anon, authenticated;
+-- Functions default to EXECUTE for PUBLIC; the per-role revoke alone is
+-- insufficient (applied remotely as migration revoke_rls_auto_enable_public).
+revoke execute on function public.rls_auto_enable() from public;
