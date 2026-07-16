@@ -1,3 +1,4 @@
 # Local-only artifacts
 *.7z
 *.zip
+.claude
