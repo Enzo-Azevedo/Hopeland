@@ -1,6 +1,0 @@
-# Local-only artifacts
-.gitignore
-*.7z
-*.zip
-.claude
-AGENTS.md
