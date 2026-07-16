@@ -20,6 +20,13 @@ const ORIGINS: Origin[] = ["praia", "montanha", "deserto", "floresta", "cavernas
 
 const UNIQUE_VIOLATION = "23505";
 
+// Debug/cheat endpoints must never run in production. Vite compiles
+// import.meta.env.DEV to a literal `false` in the production build, so these
+// handlers hard-fail there while staying usable in local dev.
+function assertDev() {
+  if (!import.meta.env.DEV) throw new Error("Recurso indisponível.");
+}
+
 export const createCharacter = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: {
@@ -84,6 +91,7 @@ export const setPlayedSecondsDebug = createServerFn({ method: "POST" })
     return { seconds: Math.round(n) };
   })
   .handler(async ({ data, context }) => {
+    assertDev();
     const { error } = await context.supabase
       .from("characters")
       .update({ played_seconds: data.seconds })
@@ -100,6 +108,7 @@ export const setCharacterMoodDebug = createServerFn({ method: "POST" })
     return { mood: Math.max(0, Math.min(100, Math.round(n))) };
   })
   .handler(async ({ data, context }) => {
+    assertDev();
     const { error } = await context.supabase
       .from("characters")
       .update({ mood: data.mood })
