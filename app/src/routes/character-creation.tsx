@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
@@ -58,18 +58,10 @@ const ORIGIN_OPTIONS: Array<{ id: Origin; title: string; body: string; effects: 
   { id: "cidade", title: "Numa grande cidade", body: "Multidão, fumaça, ruído constante. Aprender a pensar rápido no meio de tudo.", effects: ["+50% irritação (debuff social)", "+5 Raciocínio"] },
 ];
 
-const SKILL_LABEL: Record<string, string> = {
-  fisica: "Física", intelectual: "Intelectual", agil: "Ágil", social: "Social",
-  vigor: "Vigor", forca: "Força", resistencia: "Resistência",
-  raciocinio: "Raciocínio", abstracao: "Abstração", memorizacao: "Memorização",
-  destreza: "Destreza", velocidade: "Velocidade", equilibrio: "Equilíbrio",
-  carisma: "Carisma", extroversao: "Extroversão", labia: "Lábia",
-};
-
 function CharacterCreationPage() {
   const navigate = useNavigate();
   const forge = useServerFn(createCharacter);
-  const [step, setStep] = useState<0 | 1 | 2 | 3 | 4 | 5>(0);
+  const [step, setStep] = useState<0 | 1 | 2 | 3 | 4>(0);
   const [name, setName] = useState("");
   const [gender, setGender] = useState<"f" | "m" | null>(null);
   const [category, setCategory] = useState<Category | null>(null);
@@ -171,7 +163,7 @@ function CharacterCreationPage() {
             <Question
               intro="Um lugar pra chamar de seu."
               prompt='"Este definitivamente seria um ótimo lugar para viver..."'
-              options={ORIGIN_OPTIONS.map(o => ({ id: o.id, title: o.title, body: o.body, footer: o.effects.join(" · ") }))}
+              options={ORIGIN_OPTIONS.map(o => ({ id: o.id, title: o.title, body: o.body }))}
               selected={origin}
               onPick={(id) => {
                 const ori = id as Origin;
@@ -184,23 +176,17 @@ function CharacterCreationPage() {
             />
           )}
           {step === 4 && (
-            <SummaryView
+            <RevealView
               character={character}
               submitting={submitting}
               error={error}
-              onContinue={() => setStep(5)}
-              onRestart={() => { setStep(0); setName(""); setGender(null); setCategory(null); setProfession(null); setOrigin(null); setCharacter(null); setError(null); setSubmitting(false); }}
-              onRetry={retry}
-            />
-          )}
-          {step === 5 && character && (
-            <RevealView
-              character={character}
               onEnter={() => {
+                if (!character) return;
                 saveActiveCharacter(character);
                 navigate({ to: "/game" });
               }}
-              onBack={() => setStep(4)}
+              onRetry={retry}
+              onRestart={() => { setStep(0); setName(""); setGender(null); setCategory(null); setProfession(null); setOrigin(null); setCharacter(null); setError(null); setSubmitting(false); }}
             />
           )}
         </div>
@@ -221,7 +207,7 @@ function CharacterCreationPage() {
 }
 
 function StepIndicator({ step }: { step: number }) {
-  const labels = ["Identidade", "Origem interior", "Vocação", "Terra natal", "Resumo", "Revelação"];
+  const labels = ["Identidade", "Origem interior", "Vocação", "Terra natal", "Revelação"];
   return (
     <div className="flex items-center gap-3 text-xs text-muted-foreground">
       {labels.map((l, i) => (
@@ -265,103 +251,6 @@ function Question({
             </Card>
           );
         })}
-      </div>
-    </div>
-  );
-}
-
-function SummaryView({
-  character, submitting, error, onContinue, onRestart, onRetry,
-}: {
-  character: PersistedCharacter | null; submitting: boolean;
-  error: string | null; onContinue: () => void; onRestart: () => void; onRetry: () => void;
-}) {
-  const categoryLabels = useMemo(() => ({
-    fisica: "Física", intelectual: "Intelectual", agil: "Ágil", social: "Social",
-  } as const), []);
-
-  if (error) {
-    return (
-      <Card className="p-8 text-center">
-        <p className="text-destructive font-medium">Não foi possível finalizar seu personagem.</p>
-        <p className="mt-2 text-sm text-muted-foreground">{error}</p>
-        <div className="mt-6 flex flex-wrap justify-center gap-3">
-          <Button onClick={onRetry}>Tentar novamente</Button>
-          <Button variant="ghost" onClick={onRestart}>Recomeçar</Button>
-        </div>
-      </Card>
-    );
-  }
-
-  if (submitting || !character) {
-    return (
-      <Card className="p-12 text-center">
-        <Loader2 className="mx-auto h-8 w-8 animate-spin text-primary" />
-        <p className="mt-4 text-sm text-muted-foreground">Forjando seu personagem...</p>
-      </Card>
-    );
-  }
-
-  return (
-    <div className="space-y-6">
-      <div>
-        <p className="text-sm uppercase tracking-widest text-primary">Assim você chegou aqui</p>
-        <h1 className="mt-2 font-display text-3xl sm:text-4xl font-bold">Seu personagem</h1>
-      </div>
-
-      <Card className="p-6">
-        <div className="grid gap-4 sm:grid-cols-3 text-sm">
-          <div>
-            <div className="text-muted-foreground">Origem interior</div>
-            <div className="font-semibold">{categoryLabels[character.choices.category]}</div>
-          </div>
-          <div>
-            <div className="text-muted-foreground">Vocação</div>
-            <div className="font-semibold capitalize">{character.choices.profession}</div>
-          </div>
-          <div>
-            <div className="text-muted-foreground">Terra natal</div>
-            <div className="font-semibold capitalize">{character.choices.origin}</div>
-          </div>
-        </div>
-      </Card>
-
-      <div className="grid gap-4 sm:grid-cols-2">
-        {(Object.keys(character.skills) as Array<keyof typeof character.skills>).map((cat) => (
-          <Card key={cat as string} className="p-5">
-            <div className="text-sm font-semibold text-primary">{SKILL_LABEL[cat as string]}</div>
-            <div className="mt-3 space-y-2">
-              {Object.entries(character.skills[cat as string]).map(([k, v]) => (
-                <SkillBar key={k} label={SKILL_LABEL[k] ?? k} value={v as number} />
-              ))}
-            </div>
-          </Card>
-        ))}
-      </div>
-
-      <Card className="p-5">
-        <div className="text-sm font-semibold text-primary">Tags</div>
-        <div className="mt-3 flex flex-wrap gap-2">
-          {character.tags.length === 0 && <span className="text-sm text-muted-foreground">Nenhuma tag ainda.</span>}
-          {character.tags.map((t) => (
-            <span key={t} className="rounded-full border border-primary/40 bg-primary/10 px-3 py-1 text-xs font-medium text-primary">{t}</span>
-          ))}
-        </div>
-      </Card>
-
-      <Card className="p-5">
-        <div className="text-sm font-semibold text-primary">Efeitos passivos</div>
-        <ul className="mt-3 space-y-1 text-sm text-muted-foreground">
-          {character.passives.length === 0 && <li>Nenhum efeito passivo.</li>}
-          {character.passives.map((p) => (
-            <li key={p.key}>• {p.label}</li>
-          ))}
-        </ul>
-      </Card>
-
-      <div className="flex flex-wrap gap-3 pt-2">
-        <Button size="lg" onClick={onContinue}>Ver o retrato e dar um nome</Button>
-        <Button size="lg" variant="ghost" onClick={onRestart}>Recomeçar</Button>
       </div>
     </div>
   );
@@ -419,12 +308,37 @@ function IdentityStep({
 }
 
 function RevealView({
-  character, onEnter, onBack,
+  character, submitting, error, onEnter, onRetry, onRestart,
 }: {
-  character: PersistedCharacter;
+  character: PersistedCharacter | null;
+  submitting: boolean;
+  error: string | null;
   onEnter: () => void;
-  onBack: () => void;
+  onRetry: () => void;
+  onRestart: () => void;
 }) {
+  if (error) {
+    return (
+      <Card className="p-8 text-center">
+        <p className="text-destructive font-medium">Não foi possível finalizar seu personagem.</p>
+        <p className="mt-2 text-sm text-muted-foreground">{error}</p>
+        <div className="mt-6 flex flex-wrap justify-center gap-3">
+          <Button onClick={onRetry}>Tentar novamente</Button>
+          <Button variant="ghost" onClick={onRestart}>Recomeçar</Button>
+        </div>
+      </Card>
+    );
+  }
+
+  if (submitting || !character) {
+    return (
+      <Card className="p-12 text-center">
+        <Loader2 className="mx-auto h-8 w-8 animate-spin text-primary" />
+        <p className="mt-4 text-sm text-muted-foreground">Forjando seu personagem...</p>
+      </Card>
+    );
+  }
+
   return (
     <div className="space-y-6 text-center">
       <div>
@@ -444,21 +358,7 @@ function RevealView({
 
       <div className="flex flex-wrap justify-center gap-3 pt-2">
         <Button size="lg" onClick={onEnter}>Entrar no mundo</Button>
-        <Button size="lg" variant="ghost" onClick={onBack}>Voltar ao resumo</Button>
-      </div>
-    </div>
-  );
-}
-
-function SkillBar({ label, value }: { label: string; value: number }) {
-  return (
-    <div>
-      <div className="flex justify-between text-xs">
-        <span>{label}</span>
-        <span className="text-muted-foreground">{value}/10</span>
-      </div>
-      <div className="mt-1 h-1.5 rounded-full bg-muted overflow-hidden">
-        <div className="h-full bg-primary" style={{ width: `${(value / 10) * 100}%` }} />
+        <Button size="lg" variant="ghost" onClick={onRestart}>Recomeçar</Button>
       </div>
     </div>
   );
