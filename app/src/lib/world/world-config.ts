@@ -13,6 +13,13 @@ export const MAX_CHUNK_CREATES_PER_FRAME = 1;
 // Uphill fatigue: elevation delta (per tile) that counts as climbing.
 export const CLIMB_DELTA = 0.004;
 
+// Oblique 2.5D projection (spec 2026-07-17): straight grid, square tops,
+// elevation as block height. Half a block per level, south walls only.
+export const HALF_STEP_PX = 16;
+export const MAX_LEVEL = 13; // land levels 1..13; water is 0
+export const RT_PAD_PX = MAX_LEVEL * HALF_STEP_PX; // 208
+export const CHUNK_RT_HEIGHT_PX = CHUNK_PX + 2 * RT_PAD_PX; // 1440
+
 // Generation scales are in tiles (wavelength of the noise features).
 export const GEN = {
   continentScale: 2000,
