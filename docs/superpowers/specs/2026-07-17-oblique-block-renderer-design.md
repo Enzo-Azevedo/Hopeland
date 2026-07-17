@@ -74,6 +74,15 @@ retângulo), decorações (árvores/pedras), mouse picking, multiplayer visível
   do Phaser permanece no repo (inofensivo; issue upstream segue válida).
 - Quebra de tile futura = re-bake do chunk afetado.
 
+**Tecnologias verificadas (2026-07-17):** no Phaser 4 o batching do bake é
+automático (a API manual `beginDraw/batchDraw` do v3 foi removida — não
+tentar usá-la); as issues abertas de RT/DynamicTexture são só de masks
+(#7306, #7000) e Spine (#6948) — **não usar masks dentro do bake**; mipmaps
+já irrelevantes com `pixelArt: true`. Alternativas reavaliadas e descartadas:
+SpriteGPULayer (API de abril/2026, risco de imaturidade — mesmo caso do
+TilemapGPULayer que precisou de patch) e TilemapGPULayer (sem offset
+vertical por tile, não expressa elevação).
+
 ## Jogador
 
 - Desenha acima do terreno em `screenY − level·16` do tile atual, com
