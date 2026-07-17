@@ -44,6 +44,7 @@ class WorldScene extends Phaser.Scene {
   private manifest!: AtlasManifest;
   private chunks = new Map<string, LoadedChunk>();
   private fatigue = new FatigueTracker();
+  private cleanFrames = 0;
 
   constructor(onMove?: (x: number, y: number) => void) {
     super("WorldScene");
@@ -72,6 +73,21 @@ class WorldScene extends Phaser.Scene {
     this.cameras.main.startFollow(this.player, true, 0.15, 0.15);
 
     this.cursors = this.input.keyboard!.addKeys("W,A,S,D") as typeof this.cursors;
+
+    // Render-on-demand: o loop dorme quando nada está sujo (GPU a zero) e
+    // acorda no primeiro input. Listeners no DOM porque, dormindo, o Phaser
+    // não processa a própria fila de teclado até o próximo passo do loop.
+    const wake = () => {
+      if (!this.game.loop.running) this.game.loop.wake();
+    };
+    window.addEventListener("keydown", wake);
+    window.addEventListener("pointerdown", wake);
+    window.addEventListener("resize", wake);
+    this.events.once(Phaser.Scenes.Events.DESTROY, () => {
+      window.removeEventListener("keydown", wake);
+      window.removeEventListener("pointerdown", wake);
+      window.removeEventListener("resize", wake);
+    });
 
     this.updateChunks(true);
   }
@@ -144,6 +160,7 @@ class WorldScene extends Phaser.Scene {
       this.chunks.delete(key);
     }
     for (const c of plan.create) this.createChunk(c.cx, c.cy);
+    return plan.create.length > 0 || plan.destroy.length > 0;
   }
 
   update(_time: number, delta: number) {
@@ -178,7 +195,20 @@ class WorldScene extends Phaser.Scene {
       }
     }
 
-    this.updateChunks();
+    const chunksChanged = this.updateChunks();
+
+    // Dirty tracking em nível de frame: hoje as únicas fontes de mudança
+    // visual são movimento do jogador (e o lerp da câmera que o segue) e
+    // bake de chunk. Sem nada sujo por ~0,5s (tempo do lerp assentar), o
+    // loop dorme e a GPU zera; o wake é instantâneo via listeners do DOM.
+    // ATENÇÃO (futuro): água animada, NPCs ou outros jogadores visíveis
+    // são novas fontes de sujeira — inclua-as aqui ou o mundo congela.
+    if (dx !== 0 || dy !== 0 || chunksChanged) {
+      this.cleanFrames = 0;
+    } else if (++this.cleanFrames >= 30) {
+      this.cleanFrames = 0;
+      this.game.loop.sleep();
+    }
   }
 }
 
