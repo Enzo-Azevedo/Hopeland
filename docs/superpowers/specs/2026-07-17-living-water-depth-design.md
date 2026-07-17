@@ -42,6 +42,32 @@ no bake dos chunks.
    frame limpo**, sem esperar os 30 frames. Custo do idle ≈ 2,5 frames/s
    (~4% de 60fps). O interval é limpo no destroy da cena.
 
+## Correnteza (mecânica)
+
+A água **empurra** quem está nela — jogador hoje; NPCs/mobs futuros consomem
+a mesma API.
+
+- **`currentFor(seed, tx, ty): { vx: number; vy: number }`** — função pura
+  (novo módulo `app/src/lib/world/current.ts`), vetor em px/ms:
+  - Direção: **descida do campo de elevação** (gradiente negativo, via
+    `getElevation` em diferenças finitas) — rios correm naturalmente rumo ao
+    mar; no oceano profundo (gradiente ~nulo) entra uma deriva suave de
+    ruído (campo de direção lento, determinístico da seed).
+  - Intensidade por terreno: `river` mais forte, `water` média,
+    `deep_water` suave. Terra = vetor nulo.
+- **Invariante anti-trava (testado):** a intensidade máxima da correnteza é
+  **estritamente menor** que a velocidade de nado
+  (`0.2 × TERRAIN_SPEED[deep_water] = 0.07 px/ms`) — nadar contra a
+  correnteza sempre vence; impossível ficar preso, por construção.
+- Aplicação na cena: a cada frame com o jogador em tile de água,
+  `worldX/Y += current × delta` (antes dos modificadores de movimento;
+  fadiga não é afetada). **Enquanto o jogador está na água o loop não dorme**
+  (a correnteza move o jogador/câmera continuamente) — custo aceito, estar
+  na água é transitório.
+- Testes: pureza/determinismo; magnitude ≤ limite anti-trava em varredura de
+  tiles reais de água; direção aponta descida onde o gradiente é claro
+  (margem de rio); terra retorna vetor nulo.
+
 ## Fora de escopo
 
 Shader de ondas (filtro custom Phaser 4 — upgrade futuro na camada já
@@ -53,6 +79,7 @@ separada), espuma de borda, reflexos, profundidade contínua por pixel.
   (índice) no `atlas.json`.
 - `app/src/lib/world/projection.ts` — `brightnessFor(level: number): number`
   (+ testes: limites [0.8, 1.0], monotônica, nível 13 = 1.0).
+- `app/src/lib/world/current.ts` — `currentFor(seed, tx, ty)` (+ testes).
 - `app/src/components/PhaserGame.tsx` — camada de água + tick/wake +
   mudanças no bake (transparência, véu, tints, oclusão).
 - `app/src/lib/world/atlas.test.ts` — `white` presente e válido.
