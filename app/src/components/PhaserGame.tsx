@@ -162,6 +162,10 @@ class WorldScene extends Phaser.Scene {
         });
       }
     }
+    // Phaser 4: stamp() only queues commands into the texture's command
+    // buffer — nothing is drawn until render() flushes it ("You must do
+    // this in order to see anything drawn to it").
+    rt.render();
     this.chunks.set(chunkKey(cx, cy), { rt });
   }
 
