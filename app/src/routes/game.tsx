@@ -11,6 +11,7 @@ import { getActiveCharacter, setCharacterMoodDebug, setPlayedSecondsDebug } from
 import { useHeartbeat } from "@/lib/use-heartbeat";
 import { ageStage, isDeadByAge, stageLabel } from "@/lib/age-stage";
 import type { PersistedCharacter } from "@/lib/character-row";
+import { ALLOW_GUEST_ACCESS } from "@/lib/dev-flags";
 
 const DEV = import.meta.env.DEV;
 
@@ -36,18 +37,18 @@ function GamePage() {
     supabase.auth.getSession()
       .then(({ data }) => {
         if (!data.session) {
-          navigate({ to: "/auth" });
+          if (!ALLOW_GUEST_ACCESS) navigate({ to: "/auth" });
           return;
         }
         setEmail(data.session.user.email ?? null);
       })
       .catch((error) => {
         console.error("[auth] session check failed:", error);
-        navigate({ to: "/auth" });
+        if (!ALLOW_GUEST_ACCESS) navigate({ to: "/auth" });
       });
 
     const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {
-      if (!session) navigate({ to: "/auth" });
+      if (!session && !ALLOW_GUEST_ACCESS) navigate({ to: "/auth" });
     });
     return () => sub.subscription.unsubscribe();
   }, [navigate]);
@@ -59,7 +60,7 @@ function GamePage() {
     fetchActive()
       .then((fresh) => {
         if (!fresh) {
-          navigate({ to: "/character-creation" });
+          if (!ALLOW_GUEST_ACCESS) navigate({ to: "/character-creation" });
           return;
         }
         saveActiveCharacter(fresh);
@@ -69,7 +70,7 @@ function GamePage() {
       })
       .catch((error) => {
         console.error("[characters] load failed:", error);
-        if (!cached?.name) navigate({ to: "/character-creation" });
+        if (!cached?.name && !ALLOW_GUEST_ACCESS) navigate({ to: "/character-creation" });
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [navigate]);
@@ -130,7 +131,7 @@ function GamePage() {
 
       {/* HUD top-left: session info */}
       <Card className="absolute top-4 left-4 p-3 space-y-1 text-xs bg-background/85 backdrop-blur">
-        <div><span className="text-muted-foreground">Conta:</span> {email ?? "—"}</div>
+        <div><span className="text-muted-foreground">Conta:</span> {email ?? (ALLOW_GUEST_ACCESS ? "convidado (sem login)" : "—")}</div>
         {character?.name && (
           <div><span className="text-muted-foreground">Personagem:</span> {character.name}</div>
         )}
