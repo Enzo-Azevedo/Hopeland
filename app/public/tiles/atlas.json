@@ -1,0 +1,117 @@
+{
+  "tileSize": 32,
+  "columns": 8,
+  "frames": [
+    "grass_0",
+    "grass_1",
+    "forest_0",
+    "forest_1",
+    "jungle_0",
+    "jungle_1",
+    "savanna_0",
+    "savanna_1",
+    "taiga_0",
+    "taiga_1",
+    "tundra_0",
+    "tundra_1",
+    "swamp_0",
+    "swamp_1",
+    "desert_0",
+    "desert_1",
+    "beach_0",
+    "snow_0",
+    "rock_0",
+    "rock_1",
+    "snow_rock_0",
+    "snow_rock_1",
+    "water_0",
+    "water_1",
+    "water_2",
+    "water_3",
+    "deep_water_0",
+    "deep_water_1",
+    "deep_water_2",
+    "deep_water_3",
+    "river_0",
+    "river_1",
+    "river_2",
+    "river_3"
+  ],
+  "terrain": {
+    "grass": [
+      0,
+      1
+    ],
+    "forest": [
+      2,
+      3
+    ],
+    "jungle": [
+      4,
+      5
+    ],
+    "savanna": [
+      6,
+      7
+    ],
+    "taiga": [
+      8,
+      9
+    ],
+    "tundra": [
+      10,
+      11
+    ],
+    "swamp": [
+      12,
+      13
+    ],
+    "desert": [
+      14,
+      15
+    ],
+    "beach": [
+      16
+    ],
+    "snow": [
+      17
+    ],
+    "rock": [
+      18,
+      19
+    ],
+    "snow_rock": [
+      20,
+      21
+    ],
+    "water": [
+      22
+    ],
+    "deep_water": [
+      26
+    ],
+    "river": [
+      30
+    ]
+  },
+  "waterFrames": {
+    "water": [
+      22,
+      23,
+      24,
+      25
+    ],
+    "deep_water": [
+      26,
+      27,
+      28,
+      29
+    ],
+    "river": [
+      30,
+      31,
+      32,
+      33
+    ]
+  }
+}
