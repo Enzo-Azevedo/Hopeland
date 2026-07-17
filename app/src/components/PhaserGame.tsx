@@ -12,6 +12,7 @@ import {
 import { findSpawn, getWorldTile } from "@/lib/world/world-gen";
 import { FatigueTracker, TERRAIN_SPEED } from "@/lib/world/movement";
 import { chunkKey, planChunkUpdates, tileToChunk } from "@/lib/world/chunk-manager";
+import { pickVariant } from "@/lib/world/tile-variants";
 
 interface PhaserGameProps {
   onPositionChange?: (x: number, y: number) => void;
@@ -27,14 +28,7 @@ interface AtlasManifest {
 
 interface LoadedChunk {
   map: Phaser.Tilemaps.Tilemap;
-  layer: Phaser.GameObjects.GameObject;
-}
-
-/** Deterministic per-tile hash for picking texture variants. */
-function tileHash(tx: number, ty: number): number {
-  let h = (Math.imul(tx, 73856093) ^ Math.imul(ty, 19349663)) >>> 0;
-  h = Math.imul(h ^ (h >>> 13), 0x5bd1e995) >>> 0;
-  return h;
+  container: Phaser.GameObjects.Container;
 }
 
 class WorldScene extends Phaser.Scene {
@@ -84,7 +78,7 @@ class WorldScene extends Phaser.Scene {
 
   private frameFor(terrain: string, tx: number, ty: number): number {
     const frames = this.manifest.terrain[terrain] ?? this.manifest.terrain["grass"]!;
-    return frames[tileHash(tx, ty) % frames.length]!;
+    return pickVariant(frames, tx, ty);
   }
 
   private createChunk(cx: number, cy: number) {
@@ -102,6 +96,12 @@ class WorldScene extends Phaser.Scene {
     const map = this.make.tilemap({ data, tileWidth: TILE_SIZE, tileHeight: TILE_SIZE });
     const tileset = map.addTilesetImage("tiles", "tiles", TILE_SIZE, TILE_SIZE, 0, 0)!;
 
+    // The layer lives at (0,0) inside a container placed at the chunk's
+    // world position. Phaser 4.2.1's SubmitterTilemapGPULayer applies the
+    // layer's own (x,y) twice (once in the sprite matrix, again in setQuad),
+    // which doubled chunk offsets and left chunk-wide holes in the world.
+    // With the layer at (0,0) the double-apply is a no-op and the container
+    // provides the position exactly once, via parentMatrix.
     let layer: Phaser.GameObjects.GameObject;
     const GPULayer = (Phaser.Tilemaps as unknown as Record<string, unknown>)["TilemapGPULayer"] as
       | (new (
@@ -115,15 +115,15 @@ class WorldScene extends Phaser.Scene {
       | undefined;
     try {
       if (!GPULayer) throw new Error("TilemapGPULayer unavailable");
-      const gpu = new GPULayer(this, map, 0, tileset, cx * CHUNK_PX, cy * CHUNK_PX);
-      this.add.existing(gpu);
-      layer = gpu;
+      layer = new GPULayer(this, map, 0, tileset, 0, 0);
     } catch (err) {
       // Fallback (canvas renderer or API change): classic layer, still correct.
       console.warn("TilemapGPULayer unavailable, falling back to TilemapLayer", err);
-      layer = map.createLayer(0, tileset, cx * CHUNK_PX, cy * CHUNK_PX)!;
+      layer = map.createLayer(0, tileset, 0, 0)!;
+      layer.removeFromDisplayList();
     }
-    this.chunks.set(chunkKey(cx, cy), { map, layer });
+    const container = this.add.container(cx * CHUNK_PX, cy * CHUNK_PX, [layer]);
+    this.chunks.set(chunkKey(cx, cy), { map, container });
   }
 
   private updateChunks(force = false) {
@@ -139,7 +139,7 @@ class WorldScene extends Phaser.Scene {
     );
     for (const key of plan.destroy) {
       const chunk = this.chunks.get(key)!;
-      chunk.layer.destroy();
+      chunk.container.destroy(true);
       chunk.map.destroy();
       this.chunks.delete(key);
     }
