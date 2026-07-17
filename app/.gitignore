@@ -35,3 +35,4 @@ dist-ssr
 # Secrets — keep local only
 .env
 world-map.png
+world-relief.png

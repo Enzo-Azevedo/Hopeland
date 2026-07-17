@@ -116,3 +116,75 @@ await writeFile(
 );
 
 console.log(`atlas: ${FRAME_DEFS.length} frames, ${COLUMNS}x${rows}`);
+
+// ---- South wall strips (oblique 2.5D renderer) --------------------------
+// One 32x16 strip per material, darkened so walls read as shaded faces.
+// Faithful to Minecraft: grass-family sides are dirt, desert/beach sand,
+// mountain stone, snow snow.
+
+const WALL_SOURCES = [
+  ["dirt", "dirt.png"],
+  ["sand", "sand.png"],
+  ["stone", "stone.png"],
+  ["snow", "snow.png"],
+];
+
+const WALL_TERRAIN = {
+  beach: "sand",
+  grass: "dirt",
+  forest: "dirt",
+  jungle: "dirt",
+  swamp: "dirt",
+  desert: "sand",
+  savanna: "dirt",
+  tundra: "dirt",
+  snow: "snow",
+  taiga: "dirt",
+  rock: "stone",
+  snow_rock: "snow",
+};
+
+const STRIP_H = 16;
+const wallBuffers = [];
+for (const [, file] of WALL_SOURCES) {
+  wallBuffers.push(
+    await sharp(path.join(SRC, file))
+      .extract({ left: 0, top: 0, width: TILE, height: STRIP_H })
+      .composite([
+        // Uniform darkening so the face reads as shadowed...
+        { input: { create: { width: TILE, height: STRIP_H, channels: 4, background: "#8f8f8f" } }, blend: "multiply" },
+        // ...plus a darker foot for depth.
+        { input: Buffer.from(
+            `<svg width="${TILE}" height="${STRIP_H}"><rect y="${STRIP_H - 4}" width="${TILE}" height="4" fill="rgba(0,0,0,0.35)"/></svg>`,
+          ), blend: "over" },
+      ])
+      .png()
+      .toBuffer(),
+  );
+}
+
+await sharp({
+  create: { width: TILE, height: STRIP_H * WALL_SOURCES.length, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } },
+})
+  .composite(wallBuffers.map((input, i) => ({ input, left: 0, top: i * STRIP_H })))
+  .png()
+  .toFile(path.join(OUT, "walls.png"));
+
+const wallFrameIndex = Object.fromEntries(WALL_SOURCES.map(([name], i) => [name, i]));
+await writeFile(
+  path.join(OUT, "walls.json"),
+  JSON.stringify(
+    {
+      stripWidth: TILE,
+      stripHeight: STRIP_H,
+      frames: WALL_SOURCES.map(([name]) => name),
+      terrain: Object.fromEntries(
+        Object.entries(WALL_TERRAIN).map(([t, mat]) => [t, wallFrameIndex[mat]]),
+      ),
+    },
+    null,
+    2,
+  ),
+);
+
+console.log(`walls: ${WALL_SOURCES.length} strips`);
