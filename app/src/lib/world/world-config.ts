@@ -27,8 +27,8 @@ export const GEN = {
   riverWidth: 0.012,
   // Elevation thresholds
   deepWater: -0.25,
-  water: -0.03,
-  beach: 0.02,
+  water: -0.015,
+  beach: 0.005,
   rock: 0.62,
   snowRock: 0.78,
   // Climate thresholds
