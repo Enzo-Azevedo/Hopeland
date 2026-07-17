@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { hashString, Simplex2 } from "./noise";
+import { erodedFbm, fbm, hashString, ridgedFbm, Simplex2 } from "./noise";
 
 describe("hashString", () => {
   test("is deterministic and seed-sensitive", () => {
@@ -50,5 +50,43 @@ describe("Simplex2", () => {
       expect(Math.abs(s.dx - fdx)).toBeLessThan(0.01);
       expect(Math.abs(s.dy - fdy)).toBeLessThan(0.01);
     }
+  });
+});
+
+describe("fractal builders", () => {
+  const noise = new Simplex2(hashString("Esperança"));
+
+  test("fbm is deterministic, bounded, and richer than one octave", () => {
+    expect(fbm(noise, 3.3, 4.4, 5)).toEqual(fbm(noise, 3.3, 4.4, 5));
+    let min = Infinity;
+    let max = -Infinity;
+    for (let i = 0; i < 1000; i++) {
+      const v = fbm(noise, i * 0.11, i * 0.07, 5).value;
+      expect(Math.abs(v)).toBeLessThanOrEqual(1);
+      min = Math.min(min, v);
+      max = Math.max(max, v);
+    }
+    expect(max - min).toBeGreaterThan(0.5);
+  });
+
+  test("erodedFbm stays bounded and diverges from plain fbm", () => {
+    let differs = 0;
+    for (let i = 0; i < 200; i++) {
+      const e = erodedFbm(noise, i * 0.13, i * 0.19, 5, 8);
+      expect(Math.abs(e.value)).toBeLessThanOrEqual(1);
+      if (Math.abs(e.value - fbm(noise, i * 0.13, i * 0.19, 5).value) > 1e-9) differs++;
+    }
+    expect(differs).toBeGreaterThan(150);
+  });
+
+  test("ridgedFbm is in [0,1] and reaches high values", () => {
+    let max = 0;
+    for (let i = 0; i < 1000; i++) {
+      const v = ridgedFbm(noise, i * 0.17, i * 0.23, 4);
+      expect(v).toBeGreaterThanOrEqual(0);
+      expect(v).toBeLessThanOrEqual(1);
+      max = Math.max(max, v);
+    }
+    expect(max).toBeGreaterThan(0.6);
   });
 });

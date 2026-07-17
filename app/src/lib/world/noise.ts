@@ -102,3 +102,76 @@ export class Simplex2 {
     return { value: v, dx: dx * SCALE, dy: dy * SCALE };
   }
 }
+
+/** Standard fBm with chain-ruled derivatives, normalized to ~[-1, 1]. */
+export function fbm(
+  noise: Simplex2,
+  x: number,
+  y: number,
+  octaves: number,
+  lacunarity = 2,
+  gain = 0.5,
+): NoiseSample {
+  let value = 0;
+  let dx = 0;
+  let dy = 0;
+  let amp = 1;
+  let freq = 1;
+  let norm = 0;
+  for (let o = 0; o < octaves; o++) {
+    const n = noise.sample(x * freq, y * freq);
+    value += amp * n.value;
+    dx += amp * freq * n.dx;
+    dy += amp * freq * n.dy;
+    norm += amp;
+    amp *= gain;
+    freq *= lacunarity;
+  }
+  return { value: value / norm, dx: dx / norm, dy: dy / norm };
+}
+
+/**
+ * Erosion-style fBm (Quilez / de Carpentier): high-frequency octaves are
+ * damped where the accumulated gradient is steep, producing smooth valleys
+ * and rough ridges.
+ */
+export function erodedFbm(
+  noise: Simplex2,
+  x: number,
+  y: number,
+  octaves: number,
+  erosion: number,
+): NoiseSample {
+  let value = 0;
+  let sumDx = 0;
+  let sumDy = 0;
+  let amp = 1;
+  let freq = 1;
+  let norm = 0;
+  for (let o = 0; o < octaves; o++) {
+    const n = noise.sample(x * freq, y * freq);
+    sumDx += amp * freq * n.dx;
+    sumDy += amp * freq * n.dy;
+    value += (amp * n.value) / (1 + erosion * (sumDx * sumDx + sumDy * sumDy));
+    norm += amp;
+    amp *= 0.5;
+    freq *= 2;
+  }
+  return { value: value / norm, dx: sumDx / norm, dy: sumDy / norm };
+}
+
+/** Ridged multifractal in [0, 1]: sharp continuous crests. */
+export function ridgedFbm(noise: Simplex2, x: number, y: number, octaves: number): number {
+  let value = 0;
+  let amp = 0.5;
+  let freq = 1;
+  let norm = 0;
+  for (let o = 0; o < octaves; o++) {
+    const n = 1 - Math.abs(noise.sample(x * freq, y * freq).value);
+    value += amp * n * n;
+    norm += amp;
+    amp *= 0.5;
+    freq *= 2;
+  }
+  return value / norm;
+}
