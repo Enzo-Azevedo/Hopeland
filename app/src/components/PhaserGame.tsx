@@ -16,7 +16,7 @@ import { findSpawn, getWorldTile } from "@/lib/world/world-gen";
 import { FatigueTracker, TERRAIN_SPEED } from "@/lib/world/movement";
 import { chunkKey, planChunkUpdates, tileToChunk } from "@/lib/world/chunk-manager";
 import { pickVariant } from "@/lib/world/tile-variants";
-import { levelFor, projectY, wallStripsFor } from "@/lib/world/projection";
+import { isOccluded, levelFor, projectY, wallStripsFor } from "@/lib/world/projection";
 
 interface PhaserGameProps {
   onPositionChange?: (x: number, y: number) => void;
@@ -43,6 +43,9 @@ interface LoadedChunk {
 
 class WorldScene extends Phaser.Scene {
   private player!: Phaser.GameObjects.Rectangle;
+  private worldX = 0;
+  private worldY = 0;
+  private renderLevel = 0;
   private cursors!: {
     W: Phaser.Input.Keyboard.Key;
     A: Phaser.Input.Keyboard.Key;
@@ -80,12 +83,19 @@ class WorldScene extends Phaser.Scene {
     this.wallsManifest = this.cache.json.get("walls-manifest") as WallsManifest;
 
     const spawn = findSpawn(WORLD_SEED);
-    const px = spawn.tx * TILE_SIZE + TILE_SIZE / 2;
-    const py = spawn.ty * TILE_SIZE + TILE_SIZE / 2;
+    this.worldX = spawn.tx * TILE_SIZE + TILE_SIZE / 2;
+    this.worldY = spawn.ty * TILE_SIZE + TILE_SIZE / 2;
+    this.renderLevel = levelFor(getWorldTile(spawn.tx, spawn.ty));
 
-    this.player = this.add.rectangle(px, py, 24, 24, 0xf5c542);
+    this.player = this.add.rectangle(
+      this.worldX,
+      projectY(this.worldY, this.renderLevel),
+      24,
+      24,
+      0xf5c542,
+    );
     this.player.setStrokeStyle(2, 0x000000);
-    this.player.setDepth(10);
+    this.player.setDepth(1_000_000); // always above terrain; occlusion is a style
 
     this.cameras.main.startFollow(this.player, true, 0.15, 0.15);
 
@@ -157,8 +167,8 @@ class WorldScene extends Phaser.Scene {
 
   private updateChunks(force = false) {
     const center = {
-      cx: tileToChunk(Math.floor(this.player.x / TILE_SIZE)),
-      cy: tileToChunk(Math.floor(this.player.y / TILE_SIZE)),
+      cx: tileToChunk(Math.floor(this.worldX / TILE_SIZE)),
+      cy: tileToChunk(Math.floor(this.worldY / TILE_SIZE)),
     };
     const plan = planChunkUpdates(
       new Set(this.chunks.keys()),
@@ -182,8 +192,8 @@ class WorldScene extends Phaser.Scene {
     if (this.cursors.A.isDown) dx -= 1;
     if (this.cursors.D.isDown) dx += 1;
 
-    const tx = Math.floor(this.player.x / TILE_SIZE);
-    const ty = Math.floor(this.player.y / TILE_SIZE);
+    const tx = Math.floor(this.worldX / TILE_SIZE);
+    const ty = Math.floor(this.worldY / TILE_SIZE);
     const here = getWorldTile(tx, ty);
 
     let climbing = false;
@@ -196,25 +206,46 @@ class WorldScene extends Phaser.Scene {
     if (dx !== 0 || dy !== 0) {
       const norm = Math.hypot(dx, dy);
       const speed = 0.2 * delta * TERRAIN_SPEED[here.terrain] * this.fatigue.multiplier;
-      this.player.x += (dx / norm) * speed;
-      this.player.y += (dy / norm) * speed;
+      this.worldX += (dx / norm) * speed;
+      this.worldY += (dy / norm) * speed;
 
       const now = performance.now();
       if (this.onMove && now - this.lastEmit > 50) {
         this.lastEmit = now;
-        this.onMove(this.player.x, this.player.y);
+        this.onMove(this.worldX, this.worldY);
       }
     }
+
+    const targetLevel = levelFor(here);
+    // ~100ms visual lerp between levels so climbing a step doesn't teleport.
+    this.renderLevel += (targetLevel - this.renderLevel) * Math.min(1, delta / 100);
+    if (Math.abs(targetLevel - this.renderLevel) < 0.01) this.renderLevel = targetLevel;
+    this.player.setPosition(this.worldX, projectY(this.worldY, this.renderLevel));
+
+    // Silhouette when terrain south of the player would cover it.
+    const colA = Math.floor((this.worldX - 12) / TILE_SIZE);
+    const colB = Math.floor((this.worldX + 12) / TILE_SIZE);
+    const southLevels: number[][] = [];
+    for (let d = 1; d <= 3; d++) {
+      const row: number[] = [];
+      for (let c = colA; c <= colB; c++) row.push(levelFor(getWorldTile(c, ty + d)));
+      southLevels.push(row);
+    }
+    const hidden = isOccluded(targetLevel, southLevels);
+    this.player.setFillStyle(0xf5c542, hidden ? 0.35 : 1);
+    this.player.setStrokeStyle(2, 0x000000, hidden ? 0.2 : 1);
 
     const chunksChanged = this.updateChunks();
 
     // Dirty tracking em nível de frame: hoje as únicas fontes de mudança
-    // visual são movimento do jogador (e o lerp da câmera que o segue) e
-    // bake de chunk. Sem nada sujo por ~0,5s (tempo do lerp assentar), o
-    // loop dorme e a GPU zera; o wake é instantâneo via listeners do DOM.
+    // visual são movimento do jogador (e o lerp da câmera que o segue),
+    // bake de chunk e o lerp do nível de renderização (subida/descida de
+    // bloco). Sem nada sujo por ~0,5s (tempo do lerp assentar), o loop
+    // dorme e a GPU zera; o wake é instantâneo via listeners do DOM.
     // ATENÇÃO (futuro): água animada, NPCs ou outros jogadores visíveis
     // são novas fontes de sujeira — inclua-as aqui ou o mundo congela.
-    if (dx !== 0 || dy !== 0 || chunksChanged) {
+    const levelSettling = this.renderLevel !== targetLevel;
+    if (dx !== 0 || dy !== 0 || chunksChanged || levelSettling) {
       this.cleanFrames = 0;
     } else if (++this.cleanFrames >= 30) {
       this.cleanFrames = 0;
