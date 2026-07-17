@@ -20,7 +20,7 @@ multiplayer visível. O modelo de dados já nasce pronto para diffs futuros.
 | Decisão | Escolha |
 |---|---|
 | Extensão | Infinito, gerado em chunks sob demanda |
-| Seed | Constante global versionada no código (`world-config.ts`); mesma para todos (MMO). Migra para o banco se um dia houver múltiplos mundos |
+| Seed | **`"Esperança"`** — constante global versionada no código (`world-config.ts`), convertida em seed numérica por hash de string determinístico; mesma para todos (MMO). Migra para o banco se um dia houver múltiplos mundos |
 | Anti-trava | **Nenhum tile bloqueia.** Água nada-se (lento), subida prolongada fatiga (lento). Sem colisores de terreno |
 | Biomas | 9+: tundra, taiga, neve, planície, floresta, pântano, deserto, savana, floresta tropical + água (oceano/rio/costa), praia, montanha (rocha/rocha nevada) |
 | Escala de bioma | Manchas de ~500×500 tiles; continentes ~2000 tiles |
