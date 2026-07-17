@@ -15,6 +15,13 @@ Fora de escopo desta entrega: quebrar tiles, ferramentas, inventário,
 persistência de modificações do mundo, avatar do jogador, animação de água,
 multiplayer visível. O modelo de dados já nasce pronto para diffs futuros.
 
+**Fase 2 planejada (decisão do dono):** visual isométrico 2.5D estilo
+Minecraft Dungeons — trocar apenas o renderer (blocos isométricos gerados em
+build-time a partir das texturas, SpriteGPULayer/tilemap isométrico,
+depth-sorting, elevação visível como altura de bloco). A geração, o
+chunk-manager (agnóstico de render, por design), movimento e spawn não
+mudam. Esta entrega permanece top-down ortogonal.
+
 ## Decisões fundamentais
 
 | Decisão | Escolha |
