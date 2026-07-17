@@ -30,7 +30,11 @@ multiplayer visível. O modelo de dados já nasce pronto para diffs futuros.
 
 Toda a geração é função pura de `(seed, tileX, tileY)`. Ruído base: **simplex
 2D com derivadas analíticas** (implementação própria, sem dependência nova;
-hash da grade derivado de `mulberry32`, já usado no repo).
+hash da grade derivado de `mulberry32`, já usado no repo). Avaliadas as libs
+maduras (`simplex-noise`, `fastnoise-lite`): nenhuma expõe derivadas
+analíticas, exigidas pela camada de erosão — custom é necessário de qualquer
+jeito; `fastnoise-lite` fica como fallback se a implementação própria se
+mostrar problemática.
 
 1. **Domain warping** — dois fBm auxiliares distorcem as coordenadas
    (amplitude ~100-200 tiles) antes de amostrar as camadas seguintes.
@@ -61,16 +65,21 @@ ms.
 
 - **Chunk = 32×32 tiles**, tile de 32 px ⇒ 1024×1024 px. Endereço canônico
   `(chunkX, chunkY, tileIndex)` com `chunk = floor(tile/32)`.
-- **RenderTexture por chunk**: os tiles são carimbados do atlas **uma vez**;
-  no steady-state cada chunk custa 1 draw call. (TilemapLayer faz culling por
-  tile por frame — pior para chunks estáticos. Quando existir quebra de tile,
-  re-carimba-se só o tile alterado.)
+- **TilemapGPULayer por chunk** (Phaser 4, novo no v4.0): os índices dos
+  tiles vão numa data texture e o chunk inteiro renderiza como **um quad no
+  shader**, quase todo GPU-bound. Criação de chunk = preencher 1024 texels
+  (muito mais barato que carimbar sprites). Suporta **tiles animados**
+  (água anima já na v1) e edição em runtime (`putTileAt` +
+  `generateLayerDataTexture()`) — pronto para o futuro sistema de quebra.
+  Requisitos compatíveis: tileset único (nosso atlas), ortográfico,
+  WebGL-only (config exige WebGL). Por ser API recente, o chunk-manager fica
+  **agnóstico ao backend de render**; fallback documentado: RenderTexture
+  por chunk (carimbo único, 1 draw call por chunk).
 - **Anel 5×5** de chunks ao redor da câmera; criação via **fila com orçamento
-  de tempo** (máx. 1 chunk assado por frame, priorizando a direção do
-  movimento) — nunca trava o frame. Web Worker para o ruído só se um hitch
-  for medido.
-- **Pool de RenderTextures**: chunks que saem do anel devolvem a textura ao
-  pool. Cache LRU dos dados de tile gerados.
+  de tempo** (máx. 1 chunk por frame, priorizando a direção do movimento) —
+  nunca trava o frame. Web Worker para o ruído só se um hitch for medido.
+- **Pool/reuso de layers**: chunks que saem do anel são reaproveitados.
+  Cache LRU dos dados de tile gerados.
 - Câmera segue o jogador (retângulo atual permanece).
 
 ## Texturas (Classic Faithful 32x)
@@ -86,7 +95,9 @@ Pipeline espelhado no dos retratos:
 3. Cada terreno mapeia para 2-4 variantes escolhidas por hash determinístico
    do tile (quebra repetição). Sem máscaras de transição na v1 — bordas
    duras estilo Minecraft; o warp já evita fronteiras retas.
-4. Água usa o primeiro frame da strip animada.
+4. Água usa a strip animada do pack como tiles animados da TilemapGPULayer
+   (frames entram no atlas; se o fallback RenderTexture for acionado, usa-se
+   o primeiro frame estático).
 
 **Licença** ⚠️: Faithful License v3 — atribuição + link para
 faithfulpack.net obrigatórios, **monetização proibida**. Agravante: Faithful
