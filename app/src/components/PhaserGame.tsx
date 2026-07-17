@@ -194,6 +194,9 @@ export function PhaserGame({ onPositionChange }: PhaserGameProps) {
       parent: containerRef.current,
       width: containerRef.current.clientWidth,
       height: containerRef.current.clientHeight,
+      // NEAREST + roundPixels: sem isso o filtro LINEAR + scroll fracionário
+      // da câmera criam linhas visíveis nas bordas dos chunks (Phaser #7317).
+      pixelArt: true,
       backgroundColor: "#1a2a1a",
       scene: new WorldScene(onPositionChange),
       scale: {

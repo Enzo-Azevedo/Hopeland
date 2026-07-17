@@ -1,0 +1,57 @@
+diff --git a/dist/phaser.esm.js b/dist/phaser.esm.js
+index f692e97d34697764597f2d29d7f04e2bf62333a8..f1616573258c371a66c973022f3cf9f09b126d39 100644
+--- a/dist/phaser.esm.js
++++ b/dist/phaser.esm.js
+@@ -203533,10 +203533,10 @@ var SubmitterTilemapGPULayer = new Class({
+ 
+         // Compute output quad.
+         calcMatrix.setQuad(
+-            x,
+-            y,
+-            x + width,
+-            y + height,
++            0,
++            0,
++            width,
++            height,
+             quad
+         );
+ 
+diff --git a/dist/phaser.js b/dist/phaser.js
+index 3a84f7db81d309f5956237fee262134f3b4d051a..68ba93cb5747cb514a3ee7b6093886c142f975e7 100644
+--- a/dist/phaser.js
++++ b/dist/phaser.js
+@@ -203643,10 +203643,10 @@ var SubmitterTilemapGPULayer = new Class({
+ 
+         // Compute output quad.
+         calcMatrix.setQuad(
+-            x,
+-            y,
+-            x + width,
+-            y + height,
++            0,
++            0,
++            width,
++            height,
+             quad
+         );
+ 
+diff --git a/src/renderer/webgl/renderNodes/submitter/SubmitterTilemapGPULayer.js b/src/renderer/webgl/renderNodes/submitter/SubmitterTilemapGPULayer.js
+index da6be803e9d9a22178439d5e63da8867be2686ac..fc1150a820ee3239b8aced01b601a120d9a15cc3 100644
+--- a/src/renderer/webgl/renderNodes/submitter/SubmitterTilemapGPULayer.js
++++ b/src/renderer/webgl/renderNodes/submitter/SubmitterTilemapGPULayer.js
+@@ -516,10 +516,10 @@ var SubmitterTilemapGPULayer = new Class({
+ 
+         // Compute output quad.
+         calcMatrix.setQuad(
+-            x,
+-            y,
+-            x + width,
+-            y + height,
++            0,
++            0,
++            width,
++            height,
+             quad
+         );
+ 

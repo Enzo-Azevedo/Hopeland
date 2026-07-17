@@ -87,5 +87,8 @@
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.56.1",
     "vite": "^8.0.16"
+  },
+  "patchedDependencies": {
+    "phaser@4.2.1": "patches/phaser@4.2.1.patch"
   }
 }
