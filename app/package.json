@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "build:portraits": "bun scripts/build-portraits.mjs"
+    "build:portraits": "bun scripts/build-portraits.mjs",
+    "build:tiles": "node scripts/build-tiles.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
