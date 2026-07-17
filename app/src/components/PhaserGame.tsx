@@ -118,8 +118,9 @@ class WorldScene extends Phaser.Scene {
       const gpu = new GPULayer(this, map, 0, tileset, cx * CHUNK_PX, cy * CHUNK_PX);
       this.add.existing(gpu);
       layer = gpu;
-    } catch {
+    } catch (err) {
       // Fallback (canvas renderer or API change): classic layer, still correct.
+      console.warn("TilemapGPULayer unavailable, falling back to TilemapLayer", err);
       layer = map.createLayer(0, tileset, cx * CHUNK_PX, cy * CHUNK_PX)!;
     }
     this.chunks.set(chunkKey(cx, cy), { map, layer });
