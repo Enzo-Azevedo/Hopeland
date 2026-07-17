@@ -1,6 +1,6 @@
 // app/src/lib/world/world-gen.test.ts
 import { describe, expect, test } from "bun:test";
-import { classifyBiome, getTile, getWorldTile, type Terrain } from "./world-gen";
+import { classifyBiome, findSpawn, getTile, getWorldTile, type Terrain } from "./world-gen";
 import { WORLD_SEED } from "./world-config";
 
 describe("classifyBiome (Whittaker matrix)", () => {
@@ -63,5 +63,14 @@ describe("getTile", () => {
       if (t.terrain === "deep_water") expect(t.elevation).toBeLessThan(-0.2);
       if (t.terrain === "rock" || t.terrain === "snow_rock") expect(t.elevation).toBeGreaterThan(0.5);
     }
+  });
+});
+
+describe("findSpawn", () => {
+  test("is deterministic and lands on dry, gentle ground", () => {
+    const a = findSpawn(WORLD_SEED);
+    expect(findSpawn(WORLD_SEED)).toEqual(a);
+    const t = getTile(WORLD_SEED, a.tx, a.ty);
+    expect(["grass", "forest"]).toContain(t.terrain);
   });
 });

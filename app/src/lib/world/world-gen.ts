@@ -150,3 +150,28 @@ export function getTile(seed: string, tx: number, ty: number): Tile {
 export function getWorldTile(tx: number, ty: number): Tile {
   return getTile(WORLD_SEED, tx, ty);
 }
+
+/**
+ * Deterministic spawn: square spiral from (0,0) in steps of 8 tiles, first
+ * plains/forest tile wins. Same spawn for every player.
+ */
+export function findSpawn(seed: string): { tx: number; ty: number } {
+  const STEP = 8;
+  const MAX_RING = 500; // 4000 tiles out — statistically unreachable
+  const ok = (tx: number, ty: number) => {
+    const t = getTile(seed, tx, ty);
+    return t.terrain === "grass" || t.terrain === "forest";
+  };
+  if (ok(0, 0)) return { tx: 0, ty: 0 };
+  for (let ring = 1; ring <= MAX_RING; ring++) {
+    const r = ring * STEP;
+    for (let i = -ring; i <= ring; i++) {
+      const s = i * STEP;
+      if (ok(s, -r)) return { tx: s, ty: -r };
+      if (ok(s, r)) return { tx: s, ty: r };
+      if (ok(-r, s)) return { tx: -r, ty: s };
+      if (ok(r, s)) return { tx: r, ty: s };
+    }
+  }
+  return { tx: 0, ty: 0 }; // fallback: origin (still walkable — nothing blocks)
+}

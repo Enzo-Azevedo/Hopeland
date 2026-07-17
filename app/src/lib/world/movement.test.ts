@@ -4,9 +4,9 @@ import { getWorldTile } from "./world-gen";
 
 describe("anti-trap invariant", () => {
   test("every terrain has a positive speed multiplier", () => {
-    for (const [terrain, mult] of Object.entries(TERRAIN_SPEED)) {
-      expect(mult, terrain).toBeGreaterThan(0);
-      expect(mult, terrain).toBeLessThanOrEqual(1);
+    for (const mult of Object.values(TERRAIN_SPEED)) {
+      expect(mult).toBeGreaterThan(0);
+      expect(mult).toBeLessThanOrEqual(1);
     }
   });
 
