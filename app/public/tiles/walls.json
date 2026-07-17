@@ -1,0 +1,24 @@
+{
+  "stripWidth": 32,
+  "stripHeight": 16,
+  "frames": [
+    "dirt",
+    "sand",
+    "stone",
+    "snow"
+  ],
+  "terrain": {
+    "beach": 1,
+    "grass": 0,
+    "forest": 0,
+    "jungle": 0,
+    "swamp": 0,
+    "desert": 1,
+    "savanna": 0,
+    "tundra": 0,
+    "snow": 3,
+    "taiga": 0,
+    "rock": 2,
+    "snow_rock": 3
+  }
+}
