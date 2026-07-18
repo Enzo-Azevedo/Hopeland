@@ -67,7 +67,6 @@ class WorldScene extends Phaser.Scene {
   private waterFrameIdx = 0;
   private waterInterval = 0;
   private sleepAfterSettle = false;
-  private waterFlow = { x: 0, y: 0 };
 
   constructor(onMove?: (x: number, y: number) => void) {
     super("WorldScene");
@@ -307,10 +306,6 @@ class WorldScene extends Phaser.Scene {
         this.lastEmit = now;
         this.onMove(this.worldX, this.worldY);
       }
-      // A textura da água escorre na direção da correnteza local — o fluxo
-      // visível fica alinhado com o empurrão que o jogador sente.
-      this.waterFlow.x -= cur.vx * delta * 8;
-      this.waterFlow.y -= cur.vy * delta * 8;
     }
 
     // Tile efetivo pós-movimento (input + correnteza): nível e silhueta
@@ -335,13 +330,19 @@ class WorldScene extends Phaser.Scene {
     this.player.setFillStyle(0xf5c542, hidden ? 0.35 : 1);
     this.player.setStrokeStyle(2, 0x000000, hidden ? 0.2 : 1);
 
-    // Água ancorada no mundo (anti "água acompanha o jogador") + maré
-    // vai-e-vem + fluxo direcional acumulado.
+    // Água ancorada no mundo (anti "água acompanha o jogador") + deriva
+    // global LENTA e CONSTANTE + maré vai-e-vem. A deriva é função do tempo
+    // (nunca acumula estado): velocidade fixa ~6px/s, jamais acelera. O
+    // módulo de 32000ms devolve exatamente múltiplos de 32px (textura),
+    // então o wrap é invisível e a precisão de float não degrada.
+    const t = time % 32000;
+    const driftX = t * 0.006; // 0.006*32000 = 192 = 6 texturas
+    const driftY = t * 0.003; // 0.003*32000 = 96  = 3 texturas
     const tideX = Math.sin(time / 1400) * 5;
     const tideY = Math.cos(time / 1900) * 4;
     this.waterLayer.setTilePosition(
-      this.cameras.main.scrollX + this.waterFlow.x + tideX,
-      this.cameras.main.scrollY + this.waterFlow.y + tideY,
+      this.cameras.main.scrollX + driftX + tideX,
+      this.cameras.main.scrollY + driftY + tideY,
     );
 
     const chunksChanged = this.updateChunks();
