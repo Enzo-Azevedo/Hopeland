@@ -15,9 +15,11 @@ import {
 import { findSpawn, getWorldTile } from "@/lib/world/world-gen";
 import { FatigueTracker, TERRAIN_SPEED } from "@/lib/world/movement";
 import { chunkKey, planChunkUpdates, tileToChunk } from "@/lib/world/chunk-manager";
-import { pickVariant, tileHash } from "@/lib/world/tile-variants";
+import { pickVariant } from "@/lib/world/tile-variants";
 import { brightnessFor, isOccluded, levelFor, projectY, wallStripsFor } from "@/lib/world/projection";
 import { currentFor } from "@/lib/world/current";
+import { FIELD_TILES, encodeFlow, fieldTexel, flowAt, kindOf } from "@/lib/world/flow-field";
+import { WATER_FRAG } from "@/lib/world/water-shader";
 
 interface PhaserGameProps {
   onPositionChange?: (x: number, y: number) => void;
@@ -43,7 +45,6 @@ interface WallsManifest {
 
 interface LoadedChunk {
   rt: Phaser.GameObjects.RenderTexture;
-  rivers?: Phaser.GameObjects.Container;
 }
 
 class WorldScene extends Phaser.Scene {
@@ -64,8 +65,10 @@ class WorldScene extends Phaser.Scene {
   private chunks = new Map<string, LoadedChunk>();
   private fatigue = new FatigueTracker();
   private cleanFrames = 0;
-  private waterLayer!: Phaser.GameObjects.TileSprite;
-  private waterFrameIdx = 0;
+  private flowCanvas!: Phaser.Textures.CanvasTexture;
+  private flowQueue: { cx: number; cy: number; row: number }[] = [];
+  private renderedTime = 0;
+  private waterQuad!: Phaser.GameObjects.Shader;
   private waterInterval = 0;
   private sleepAfterSettle = false;
 
@@ -85,49 +88,44 @@ class WorldScene extends Phaser.Scene {
       frameHeight: 16,
     });
     this.load.json("walls-manifest", "/tiles/walls.json");
-    // Texturas independentes: TileSprite azulejando sub-frame de atlas vaza
-    // bordas (linhas) e quebra o tilePosition.
-    for (let i = 0; i < 4; i++) {
-      this.load.image(`water-${i}`, `/tiles/water-${i}.png`);
-    }
   }
 
   create() {
     this.manifest = this.cache.json.get("tiles-manifest") as AtlasManifest;
     this.wallsManifest = this.cache.json.get("walls-manifest") as WallsManifest;
 
-    // Água é sempre plana no nível 0: uma única camada animada sob todos os
-    // chunks; tiles de água ficam transparentes no bake e a revelam.
-    this.waterLayer = this.add
-      .tileSprite(0, 0, this.scale.width, this.scale.height, "water-0")
-      .setOrigin(0, 0)
-      .setScrollFactor(0)
-      .setDepth(-1_000_000_000);
+    // Campo de fluxo toroidal 160x160: cada chunk escreve seu bloco 32x32
+    // no slot (cx mod 5, cy mod 5); o shader endereça worldTile mod 160.
+    this.flowCanvas = this.textures.createCanvas("flow-field", FIELD_TILES, FIELD_TILES)!;
+    this.flowCanvas.setFilter(Phaser.Textures.FilterMode.NEAREST);
 
-    // Rios têm tiles e animação próprios (frames mais claros do atlas), com
-    // fase deslocada por posição — cintilam como água corrente, distintos
-    // do oceano da camada global.
-    if (!this.anims.exists("river-flow")) {
-      this.anims.create({
-        key: "river-flow",
-        frames: this.anims.generateFrameNumbers("tiles", {
-          frames: this.manifest.waterFrames["river"]!,
-        }),
-        frameRate: 2.5,
-        repeat: -1,
-      });
-    }
+    const setupUniforms = (setUniform: (name: string, value: unknown) => void) => {
+      setUniform("uTime", this.renderedTime);
+      setUniform("uScroll", [this.cameras.main.scrollX, this.cameras.main.scrollY]);
+      setUniform("uResolution", [this.scale.width, this.scale.height]);
+      setUniform("uFlowTex", 0);
+    };
+
+    this.waterQuad = this.add.shader(
+      {
+        name: "water",
+        fragmentSource: WATER_FRAG,
+        setupUniforms,
+      },
+      0,
+      0,
+      this.scale.width,
+      this.scale.height,
+      ["flow-field"],
+    );
+    this.waterQuad.setOrigin(0, 0).setScrollFactor(0).setDepth(-1_000_000_000);
     this.scale.on(Phaser.Scale.Events.RESIZE, (size: Phaser.Structs.Size) => {
-      this.waterLayer.setSize(size.width, size.height);
+      this.waterQuad.setSize(size.width, size.height);
     });
 
     // Timer JS puro: os timers do Phaser não correm com o loop dormindo.
     this.waterInterval = window.setInterval(() => {
-      this.waterFrameIdx = (this.waterFrameIdx + 1) % 4;
-      this.waterLayer.setTexture(`water-${this.waterFrameIdx}`);
       if (!this.game.loop.running) {
-        // Acorda para mostrar o novo frame e permite voltar a dormir já no
-        // próximo frame limpo (sem esperar os 30 frames do contador).
         this.sleepAfterSettle = true;
         this.game.loop.wake();
       }
@@ -189,8 +187,7 @@ class WorldScene extends Phaser.Scene {
     // Southern rows must paint over walls hanging from northern chunks.
     rt.setDepth(cy);
 
-    let rivers: Phaser.GameObjects.Container | undefined;
-    const riverFrames = this.manifest.waterFrames["river"]!;
+    const block = this.flowCanvas.context.createImageData(CHUNK_SIZE, CHUNK_SIZE);
 
     for (let y = 0; y < CHUNK_SIZE; y++) {
       for (let x = 0; x < CHUNK_SIZE; x++) {
@@ -200,32 +197,16 @@ class WorldScene extends Phaser.Scene {
         const level = levelFor(tile);
         const localX = x * TILE_SIZE;
 
+        const k = kindOf(tile.terrain);
+        const px4 = (y * CHUNK_SIZE + x) * 4;
+        block.data[px4] = 128; // fluxo 0 provisório
+        block.data[px4 + 1] = 128;
+        block.data[px4 + 2] = k * 85;
+        block.data[px4 + 3] = k === 0 ? 0 : 255;
+
         if (level === 0) {
-          // Água: transparente (camada animada por baixo). Oceano profundo
-          // ganha um véu escuro — raso claro -> fundo escuro, sem shader.
-          if (tile.terrain === "deep_water") {
-            rt.stamp("tiles", this.manifest.white, localX, RT_PAD_PX + y * TILE_SIZE, {
-              originX: 0,
-              originY: 0,
-              tint: 0x0a1a3a,
-              alpha: 0.45,
-            });
-          } else if (tile.terrain === "river") {
-            // Rio: sprite animado próprio (acima do oceano, abaixo do
-            // terreno — barrancos continuam cobrindo a margem).
-            if (!rivers) {
-              rivers = this.add.container(0, 0).setDepth(-500_000_000);
-            }
-            const phase = tileHash(tx, ty) % riverFrames.length;
-            const sprite = this.add.sprite(
-              tx * TILE_SIZE + TILE_SIZE / 2,
-              ty * TILE_SIZE + TILE_SIZE / 2,
-              "tiles",
-              riverFrames[phase],
-            );
-            sprite.play({ key: "river-flow", startFrame: phase });
-            rivers.add(sprite);
-          }
+          // Água: sem stamp — o shader do quad de fundo desenha tudo, usando
+          // o campo de fluxo escrito acima e refinado em update().
           continue;
         }
 
@@ -259,11 +240,19 @@ class WorldScene extends Phaser.Scene {
         });
       }
     }
+    const slotX = fieldTexel(cx * CHUNK_SIZE);
+    const slotY = fieldTexel(cy * CHUNK_SIZE);
+    this.flowCanvas.context.putImageData(block, slotX, slotY);
+    this.flowCanvas.refresh();
+    // Refinamento do fluxo (caro nos rios) em fila orçada, linha a linha.
+    this.flowQueue = this.flowQueue.filter((q) => q.cx !== cx || q.cy !== cy);
+    this.flowQueue.push({ cx, cy, row: 0 });
+
     // Phaser 4: stamp() only queues commands into the texture's command
     // buffer — nothing is drawn until render() flushes it ("You must do
     // this in order to see anything drawn to it").
     rt.render();
-    this.chunks.set(chunkKey(cx, cy), { rt, rivers });
+    this.chunks.set(chunkKey(cx, cy), { rt });
   }
 
   private updateChunks(force = false) {
@@ -280,7 +269,6 @@ class WorldScene extends Phaser.Scene {
     for (const key of plan.destroy) {
       const chunk = this.chunks.get(key)!;
       chunk.rt.destroy();
-      chunk.rivers?.destroy(true);
       this.chunks.delete(key);
     }
     for (const c of plan.create) this.createChunk(c.cx, c.cy);
@@ -288,6 +276,8 @@ class WorldScene extends Phaser.Scene {
   }
 
   update(time: number, delta: number) {
+    this.renderedTime += delta;
+
     let dx = 0;
     let dy = 0;
     if (this.cursors.W.isDown) dy -= 1;
@@ -365,32 +355,59 @@ class WorldScene extends Phaser.Scene {
     this.player.setFillStyle(0xf5c542, hidden ? 0.35 : 1);
     this.player.setStrokeStyle(2, 0x000000, hidden ? 0.2 : 1);
 
-    // Água ancorada no mundo (anti "água acompanha o jogador") + deriva
-    // global LENTA e CONSTANTE + maré vai-e-vem. A deriva é função do tempo
-    // (nunca acumula estado): velocidade fixa ~6px/s, jamais acelera. O
-    // módulo de 32000ms devolve exatamente múltiplos de 32px (textura),
-    // então o wrap é invisível e a precisão de float não degrada.
-    const t = time % 32000;
-    const driftX = t * 0.006; // 0.006*32000 = 192 = 6 texturas
-    const driftY = t * 0.003; // 0.003*32000 = 96  = 3 texturas
-    const tideX = Math.sin(time / 1400) * 5;
-    const tideY = Math.cos(time / 1900) * 4;
-    this.waterLayer.setTilePosition(
-      this.cameras.main.scrollX + driftX + tideX,
-      this.cameras.main.scrollY + driftY + tideY,
-    );
-
     const chunksChanged = this.updateChunks();
+
+    // Orçamento de 256 tiles/frame para refinar o fluxo do shader.
+    let flowBudget = 256;
+    let flowDirty = false;
+    while (flowBudget > 0 && this.flowQueue.length > 0) {
+      const job = this.flowQueue[0]!;
+      if (!this.chunks.has(chunkKey(job.cx, job.cy))) {
+        this.flowQueue.shift();
+        continue;
+      }
+      const rowsNow = Math.min(
+        Math.ceil(flowBudget / CHUNK_SIZE),
+        CHUNK_SIZE - job.row,
+      );
+      const strip = this.flowCanvas.context.createImageData(CHUNK_SIZE, rowsNow);
+      for (let ry = 0; ry < rowsNow; ry++) {
+        for (let x = 0; x < CHUNK_SIZE; x++) {
+          const s = flowAt(
+            WORLD_SEED,
+            job.cx * CHUNK_SIZE + x,
+            job.cy * CHUNK_SIZE + job.row + ry,
+          );
+          const [r, g, b, a] = encodeFlow(s);
+          const p = (ry * CHUNK_SIZE + x) * 4;
+          strip.data[p] = r;
+          strip.data[p + 1] = g;
+          strip.data[p + 2] = b;
+          strip.data[p + 3] = a;
+        }
+      }
+      this.flowCanvas.context.putImageData(
+        strip,
+        fieldTexel(job.cx * CHUNK_SIZE),
+        fieldTexel(job.cy * CHUNK_SIZE) + job.row,
+      );
+      flowDirty = true;
+      job.row += rowsNow;
+      flowBudget -= rowsNow * CHUNK_SIZE;
+      if (job.row >= CHUNK_SIZE) this.flowQueue.shift();
+    }
+    if (flowDirty) this.flowCanvas.refresh();
 
     // Dirty tracking em nível de frame: hoje as únicas fontes de mudança
     // visual são movimento do jogador (e o lerp da câmera que o segue),
-    // bake de chunk e o lerp do nível de renderização (subida/descida de
-    // bloco). Sem nada sujo por ~0,5s (tempo do lerp assentar), o loop
-    // dorme e a GPU zera; o wake é instantâneo via listeners do DOM.
-    // ATENÇÃO (futuro): água animada, NPCs ou outros jogadores visíveis
-    // são novas fontes de sujeira — inclua-as aqui ou o mundo congela.
+    // bake de chunk, o lerp do nível de renderização (subida/descida de
+    // bloco) e o refinamento do campo de fluxo da água. Sem nada sujo por
+    // ~0,5s (tempo do lerp assentar), o loop dorme e a GPU zera; o wake é
+    // instantâneo via listeners do DOM.
+    // ATENÇÃO (futuro): NPCs ou outros jogadores visíveis são novas fontes
+    // de sujeira — inclua-as aqui ou o mundo congela.
     const levelSettling = this.renderLevel !== targetLevel;
-    if (dx !== 0 || dy !== 0 || chunksChanged || levelSettling || inWater) {
+    if (dx !== 0 || dy !== 0 || chunksChanged || levelSettling || inWater || flowDirty) {
       this.cleanFrames = 0;
       this.sleepAfterSettle = false;
     } else if (this.sleepAfterSettle) {

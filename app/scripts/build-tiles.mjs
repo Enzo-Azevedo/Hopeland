@@ -201,16 +201,3 @@ await writeFile(
 );
 
 console.log(`walls: ${WALL_SOURCES.length} strips`);
-
-// ---- Standalone water frame textures ------------------------------------
-// The animated water layer is a TileSprite; tiling a sub-frame of an atlas
-// bleeds seams and breaks tilePosition, so each frame ships as its own
-// full texture (water-0.png .. water-3.png).
-for (let row = 0; row < 4; row++) {
-  await sharp(path.join(SRC, "water_still.png"))
-    .extract({ left: 0, top: row * TILE, width: TILE, height: TILE })
-    .composite([{ input: { create: { width: TILE, height: TILE, channels: 4, background: "#3F76E4" } }, blend: "multiply" }])
-    .png()
-    .toFile(path.join(OUT, `water-${row}.png`));
-}
-console.log("water: 4 standalone frames");
