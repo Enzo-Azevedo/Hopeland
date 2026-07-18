@@ -58,6 +58,12 @@ a mesma API.
     canal do rio ao desaguar, e quanto mais longe da geração, mais fraca a
     força. No oceano plano (sem geração nem herança) entra a deriva suave
     de ruído.
+  - **Deflexão de margem (mecânica do dono, 2026-07-18)**: se a direção
+    padrão do fluxo colide com a borda do terreno, **90% da força desvia**
+    para o vizinho de água mais livre (mais cercado de água), nunca de
+    volta ao tile de onde a força veio — o fluxo "escorrega" em diagonal
+    acompanhando o canal. Testado: o fluxo quantizado de tiles de rio
+    aponta para água (não para a margem) em >85% da amostra.
   - Intensidade por terreno (teto pós-soma): `river` mais forte, `water`
     média, `deep_water` suave. Terra = vetor nulo.
 - **Invariante anti-trava (testado):** a intensidade máxima da correnteza é
