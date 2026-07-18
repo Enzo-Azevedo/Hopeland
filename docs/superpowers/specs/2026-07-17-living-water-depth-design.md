@@ -49,12 +49,17 @@ a mesma API.
 
 - **`currentFor(seed, tx, ty): { vx: number; vy: number }`** — função pura
   (novo módulo `app/src/lib/world/current.ts`), vetor em px/ms:
-  - Direção: **descida do campo de elevação** (gradiente negativo, via
-    `getElevation` em diferenças finitas) — rios correm naturalmente rumo ao
-    mar; no oceano profundo (gradiente ~nulo) entra uma deriva suave de
-    ruído (campo de direção lento, determinístico da seed).
-  - Intensidade por terreno: `river` mais forte, `water` média,
-    `deep_water` suave. Terra = vetor nulo.
+  - **Geração local**: descida do campo de elevação (gradiente negativo via
+    `getElevation`), com magnitude proporcional à inclinação (força plena a
+    partir de `|grad| ≥ 0.002`).
+  - **Momento a jusante (mecânica do dono, 2026-07-18)**: cada tile herda
+    **metade da força do tile a montante** (vizinho de água mais alto),
+    recursivo por 4 passos (1/2, 1/4, 1/8, 1/16) — a foz continua seguindo o
+    canal do rio ao desaguar, e quanto mais longe da geração, mais fraca a
+    força. No oceano plano (sem geração nem herança) entra a deriva suave
+    de ruído.
+  - Intensidade por terreno (teto pós-soma): `river` mais forte, `water`
+    média, `deep_water` suave. Terra = vetor nulo.
 - **Invariante anti-trava (testado):** a intensidade máxima da correnteza é
   **estritamente menor** que a velocidade de nado
   (`0.2 × TERRAIN_SPEED[deep_water] = 0.07 px/ms`) — nadar contra a
