@@ -23,6 +23,8 @@ interface PhaserGameProps {
   onPositionChange?: (x: number, y: number) => void;
 }
 
+const WATER_TERRAINS = new Set(["deep_water", "water", "river"]);
+
 interface AtlasManifest {
   tileSize: number;
   columns: number;
@@ -65,6 +67,7 @@ class WorldScene extends Phaser.Scene {
   private waterFrameIdx = 0;
   private waterInterval = 0;
   private sleepAfterSettle = false;
+  private waterFlow = { x: 0, y: 0 };
 
   constructor(onMove?: (x: number, y: number) => void) {
     super("WorldScene");
@@ -82,6 +85,11 @@ class WorldScene extends Phaser.Scene {
       frameHeight: 16,
     });
     this.load.json("walls-manifest", "/tiles/walls.json");
+    // Texturas independentes: TileSprite azulejando sub-frame de atlas vaza
+    // bordas (linhas) e quebra o tilePosition.
+    for (let i = 0; i < 4; i++) {
+      this.load.image(`water-${i}`, `/tiles/water-${i}.png`);
+    }
   }
 
   create() {
@@ -90,9 +98,8 @@ class WorldScene extends Phaser.Scene {
 
     // Água é sempre plana no nível 0: uma única camada animada sob todos os
     // chunks; tiles de água ficam transparentes no bake e a revelam.
-    const waterFrames = this.manifest.waterFrames["water"]!;
     this.waterLayer = this.add
-      .tileSprite(0, 0, this.scale.width, this.scale.height, "tiles", waterFrames[0])
+      .tileSprite(0, 0, this.scale.width, this.scale.height, "water-0")
       .setOrigin(0, 0)
       .setScrollFactor(0)
       .setDepth(-1_000_000_000);
@@ -102,8 +109,8 @@ class WorldScene extends Phaser.Scene {
 
     // Timer JS puro: os timers do Phaser não correm com o loop dormindo.
     this.waterInterval = window.setInterval(() => {
-      this.waterFrameIdx = (this.waterFrameIdx + 1) % waterFrames.length;
-      this.waterLayer.setFrame(waterFrames[this.waterFrameIdx]!);
+      this.waterFrameIdx = (this.waterFrameIdx + 1) % 4;
+      this.waterLayer.setTexture(`water-${this.waterFrameIdx}`);
       if (!this.game.loop.running) {
         // Acorda para mostrar o novo frame e permite voltar a dormir já no
         // próximo frame limpo (sem esperar os 30 frames do contador).
@@ -246,9 +253,7 @@ class WorldScene extends Phaser.Scene {
     return plan.create.length > 0 || plan.destroy.length > 0;
   }
 
-  update(_time: number, delta: number) {
-    this.waterLayer.setTilePosition(this.cameras.main.scrollX, this.cameras.main.scrollY);
-
+  update(time: number, delta: number) {
     let dx = 0;
     let dy = 0;
     if (this.cursors.W.isDown) dy -= 1;
@@ -285,16 +290,33 @@ class WorldScene extends Phaser.Scene {
     const cur = currentFor(WORLD_SEED, tx, ty);
     const inWater = cur.vx !== 0 || cur.vy !== 0;
     if (inWater) {
-      this.worldX += cur.vx * delta;
-      this.worldY += cur.vy * delta;
+      // A correnteza nunca joga ninguém na terra: o eixo cujo destino
+      // cruzaria a costa é cancelado. Sem isso o jogador oscila na borda
+      // (empurrado de volta a cada frame) e o nível de render nunca sobe —
+      // o "afundado no terreno" visto em produção.
+      const nx = this.worldX + cur.vx * delta;
+      const ny = this.worldY + cur.vy * delta;
+      if (WATER_TERRAINS.has(getWorldTile(Math.floor(nx / TILE_SIZE), ty).terrain)) {
+        this.worldX = nx;
+      }
+      if (WATER_TERRAINS.has(getWorldTile(tx, Math.floor(ny / TILE_SIZE)).terrain)) {
+        this.worldY = ny;
+      }
       const now = performance.now();
       if (this.onMove && now - this.lastEmit > 50) {
         this.lastEmit = now;
         this.onMove(this.worldX, this.worldY);
       }
+      // A textura da água escorre na direção da correnteza local — o fluxo
+      // visível fica alinhado com o empurrão que o jogador sente.
+      this.waterFlow.x -= cur.vx * delta * 8;
+      this.waterFlow.y -= cur.vy * delta * 8;
     }
 
-    const targetLevel = levelFor(here);
+    // Tile efetivo pós-movimento (input + correnteza): nível e silhueta
+    // usam a posição real do frame, não a de antes de mover.
+    const fty = Math.floor(this.worldY / TILE_SIZE);
+    const targetLevel = levelFor(getWorldTile(Math.floor(this.worldX / TILE_SIZE), fty));
     // ~100ms visual lerp between levels so climbing a step doesn't teleport.
     this.renderLevel += (targetLevel - this.renderLevel) * Math.min(1, delta / 100);
     if (Math.abs(targetLevel - this.renderLevel) < 0.01) this.renderLevel = targetLevel;
@@ -306,12 +328,21 @@ class WorldScene extends Phaser.Scene {
     const southLevels: number[][] = [];
     for (let d = 1; d <= 3; d++) {
       const row: number[] = [];
-      for (let c = colA; c <= colB; c++) row.push(levelFor(getWorldTile(c, ty + d)));
+      for (let c = colA; c <= colB; c++) row.push(levelFor(getWorldTile(c, fty + d)));
       southLevels.push(row);
     }
     const hidden = isOccluded(targetLevel, southLevels);
     this.player.setFillStyle(0xf5c542, hidden ? 0.35 : 1);
     this.player.setStrokeStyle(2, 0x000000, hidden ? 0.2 : 1);
+
+    // Água ancorada no mundo (anti "água acompanha o jogador") + maré
+    // vai-e-vem + fluxo direcional acumulado.
+    const tideX = Math.sin(time / 1400) * 5;
+    const tideY = Math.cos(time / 1900) * 4;
+    this.waterLayer.setTilePosition(
+      this.cameras.main.scrollX + this.waterFlow.x + tideX,
+      this.cameras.main.scrollY + this.waterFlow.y + tideY,
+    );
 
     const chunksChanged = this.updateChunks();
 
