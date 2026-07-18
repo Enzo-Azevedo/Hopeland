@@ -15,7 +15,7 @@ import {
 import { findSpawn, getWorldTile } from "@/lib/world/world-gen";
 import { FatigueTracker, TERRAIN_SPEED } from "@/lib/world/movement";
 import { chunkKey, planChunkUpdates, tileToChunk } from "@/lib/world/chunk-manager";
-import { pickVariant } from "@/lib/world/tile-variants";
+import { pickVariant, tileHash } from "@/lib/world/tile-variants";
 import { brightnessFor, isOccluded, levelFor, projectY, wallStripsFor } from "@/lib/world/projection";
 import { currentFor } from "@/lib/world/current";
 
@@ -43,6 +43,7 @@ interface WallsManifest {
 
 interface LoadedChunk {
   rt: Phaser.GameObjects.RenderTexture;
+  rivers?: Phaser.GameObjects.Container;
 }
 
 class WorldScene extends Phaser.Scene {
@@ -102,6 +103,20 @@ class WorldScene extends Phaser.Scene {
       .setOrigin(0, 0)
       .setScrollFactor(0)
       .setDepth(-1_000_000_000);
+
+    // Rios têm tiles e animação próprios (frames mais claros do atlas), com
+    // fase deslocada por posição — cintilam como água corrente, distintos
+    // do oceano da camada global.
+    if (!this.anims.exists("river-flow")) {
+      this.anims.create({
+        key: "river-flow",
+        frames: this.anims.generateFrameNumbers("tiles", {
+          frames: this.manifest.waterFrames["river"]!,
+        }),
+        frameRate: 2.5,
+        repeat: -1,
+      });
+    }
     this.scale.on(Phaser.Scale.Events.RESIZE, (size: Phaser.Structs.Size) => {
       this.waterLayer.setSize(size.width, size.height);
     });
@@ -174,6 +189,9 @@ class WorldScene extends Phaser.Scene {
     // Southern rows must paint over walls hanging from northern chunks.
     rt.setDepth(cy);
 
+    let rivers: Phaser.GameObjects.Container | undefined;
+    const riverFrames = this.manifest.waterFrames["river"]!;
+
     for (let y = 0; y < CHUNK_SIZE; y++) {
       for (let x = 0; x < CHUNK_SIZE; x++) {
         const tx = cx * CHUNK_SIZE + x;
@@ -192,6 +210,21 @@ class WorldScene extends Phaser.Scene {
               tint: 0x0a1a3a,
               alpha: 0.45,
             });
+          } else if (tile.terrain === "river") {
+            // Rio: sprite animado próprio (acima do oceano, abaixo do
+            // terreno — barrancos continuam cobrindo a margem).
+            if (!rivers) {
+              rivers = this.add.container(0, 0).setDepth(-500_000_000);
+            }
+            const phase = tileHash(tx, ty) % riverFrames.length;
+            const sprite = this.add.sprite(
+              tx * TILE_SIZE + TILE_SIZE / 2,
+              ty * TILE_SIZE + TILE_SIZE / 2,
+              "tiles",
+              riverFrames[phase],
+            );
+            sprite.play({ key: "river-flow", startFrame: phase });
+            rivers.add(sprite);
           }
           continue;
         }
@@ -230,7 +263,7 @@ class WorldScene extends Phaser.Scene {
     // buffer — nothing is drawn until render() flushes it ("You must do
     // this in order to see anything drawn to it").
     rt.render();
-    this.chunks.set(chunkKey(cx, cy), { rt });
+    this.chunks.set(chunkKey(cx, cy), { rt, rivers });
   }
 
   private updateChunks(force = false) {
@@ -245,7 +278,9 @@ class WorldScene extends Phaser.Scene {
       force ? (VIEW_RADIUS * 2 + 1) ** 2 : MAX_CHUNK_CREATES_PER_FRAME,
     );
     for (const key of plan.destroy) {
-      this.chunks.get(key)!.rt.destroy();
+      const chunk = this.chunks.get(key)!;
+      chunk.rt.destroy();
+      chunk.rivers?.destroy(true);
       this.chunks.delete(key);
     }
     for (const c of plan.create) this.createChunk(c.cx, c.cy);
