@@ -53,3 +53,13 @@ describe("wall strips manifest", () => {
     }
   });
 });
+
+describe("white utility frame", () => {
+  test("exists at a valid index named white", () => {
+    const w = (manifest as unknown as { white: number }).white;
+    expect(w).toBeDefined();
+    expect(w).toBeGreaterThanOrEqual(0);
+    expect(w).toBeLessThan(manifest.frames.length);
+    expect(manifest.frames[w]).toBe("white");
+  });
+});

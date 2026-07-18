@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { isOccluded, levelFor, projectY, wallStripsFor } from "./projection";
+import { brightnessFor, isOccluded, levelFor, projectY, wallStripsFor } from "./projection";
 import { getWorldTile } from "./world-gen";
 import { CHUNK_SIZE, GEN, HALF_STEP_PX, MAX_LEVEL } from "./world-config";
 
@@ -92,5 +92,24 @@ describe("isOccluded", () => {
   test("far ridge needs to be proportionally taller", () => {
     expect(isOccluded(1, [[2], [3], [7]])).toBe(true); // 7-1 >= 2*3
     expect(isOccluded(1, [[2], [3], [6]])).toBe(false);
+  });
+});
+
+describe("brightnessFor", () => {
+  test("stays in [0.8, 1.0] with peak exactly 1.0", () => {
+    for (let l = 0; l <= MAX_LEVEL; l++) {
+      const b = brightnessFor(l);
+      expect(b).toBeGreaterThanOrEqual(0.8);
+      expect(b).toBeLessThanOrEqual(1.0);
+    }
+    expect(brightnessFor(MAX_LEVEL)).toBe(1.0);
+  });
+
+  test("is monotonic in level and clamps out-of-range input", () => {
+    for (let l = 1; l <= MAX_LEVEL; l++) {
+      expect(brightnessFor(l)).toBeGreaterThan(brightnessFor(l - 1));
+    }
+    expect(brightnessFor(-5)).toBe(brightnessFor(0));
+    expect(brightnessFor(99)).toBe(1.0);
   });
 });

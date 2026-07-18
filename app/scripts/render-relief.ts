@@ -4,7 +4,7 @@
 
 import sharp from "sharp";
 import { getWorldTile, type Terrain } from "../src/lib/world/world-gen";
-import { levelFor, wallStripsFor } from "../src/lib/world/projection";
+import { brightnessFor, levelFor, wallStripsFor } from "../src/lib/world/projection";
 
 const COLORS: Record<Terrain, [number, number, number]> = {
   deep_water: [42, 79, 158],
@@ -50,7 +50,7 @@ for (let y = 0; y < size; y++) {
     const south = levelFor(getWorldTile(ox + x, oy + y + 1));
     const strips = wallStripsFor(level, south);
     const [r, g, b] = COLORS[t.terrain];
-    const shade = 0.78 + 0.22 * (level / 13);
+    const shade = brightnessFor(level);
     const topY = PAD + y * CELL - level * STEP;
     // wall first
     for (let wy = 0; wy < strips * STEP; wy++) {

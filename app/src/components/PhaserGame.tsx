@@ -16,7 +16,8 @@ import { findSpawn, getWorldTile } from "@/lib/world/world-gen";
 import { FatigueTracker, TERRAIN_SPEED } from "@/lib/world/movement";
 import { chunkKey, planChunkUpdates, tileToChunk } from "@/lib/world/chunk-manager";
 import { pickVariant } from "@/lib/world/tile-variants";
-import { isOccluded, levelFor, projectY, wallStripsFor } from "@/lib/world/projection";
+import { brightnessFor, isOccluded, levelFor, projectY, wallStripsFor } from "@/lib/world/projection";
+import { currentFor } from "@/lib/world/current";
 
 interface PhaserGameProps {
   onPositionChange?: (x: number, y: number) => void;
@@ -28,6 +29,7 @@ interface AtlasManifest {
   frames: string[];
   terrain: Record<string, number[]>;
   waterFrames: Record<string, number[]>;
+  white: number;
 }
 
 interface WallsManifest {
@@ -59,6 +61,10 @@ class WorldScene extends Phaser.Scene {
   private chunks = new Map<string, LoadedChunk>();
   private fatigue = new FatigueTracker();
   private cleanFrames = 0;
+  private waterLayer!: Phaser.GameObjects.TileSprite;
+  private waterFrameIdx = 0;
+  private waterInterval = 0;
+  private sleepAfterSettle = false;
 
   constructor(onMove?: (x: number, y: number) => void) {
     super("WorldScene");
@@ -81,6 +87,33 @@ class WorldScene extends Phaser.Scene {
   create() {
     this.manifest = this.cache.json.get("tiles-manifest") as AtlasManifest;
     this.wallsManifest = this.cache.json.get("walls-manifest") as WallsManifest;
+
+    // Água é sempre plana no nível 0: uma única camada animada sob todos os
+    // chunks; tiles de água ficam transparentes no bake e a revelam.
+    const waterFrames = this.manifest.waterFrames["water"]!;
+    this.waterLayer = this.add
+      .tileSprite(0, 0, this.scale.width, this.scale.height, "tiles", waterFrames[0])
+      .setOrigin(0, 0)
+      .setScrollFactor(0)
+      .setDepth(-1_000_000_000);
+    this.scale.on(Phaser.Scale.Events.RESIZE, (size: Phaser.Structs.Size) => {
+      this.waterLayer.setSize(size.width, size.height);
+    });
+
+    // Timer JS puro: os timers do Phaser não correm com o loop dormindo.
+    this.waterInterval = window.setInterval(() => {
+      this.waterFrameIdx = (this.waterFrameIdx + 1) % waterFrames.length;
+      this.waterLayer.setFrame(waterFrames[this.waterFrameIdx]!);
+      if (!this.game.loop.running) {
+        // Acorda para mostrar o novo frame e permite voltar a dormir já no
+        // próximo frame limpo (sem esperar os 30 frames do contador).
+        this.sleepAfterSettle = true;
+        this.game.loop.wake();
+      }
+    }, 400);
+    this.events.once(Phaser.Scenes.Events.DESTROY, () => {
+      window.clearInterval(this.waterInterval);
+    });
 
     const spawn = findSpawn(WORLD_SEED);
     this.worldX = spawn.tx * TILE_SIZE + TILE_SIZE / 2;
@@ -141,10 +174,24 @@ class WorldScene extends Phaser.Scene {
         const ty = cy * CHUNK_SIZE + y;
         const tile = getWorldTile(tx, ty);
         const level = levelFor(tile);
+        const localX = x * TILE_SIZE;
+
+        if (level === 0) {
+          // Água: transparente (camada animada por baixo). Oceano profundo
+          // ganha um véu escuro — raso claro -> fundo escuro, sem shader.
+          if (tile.terrain === "deep_water") {
+            rt.stamp("tiles", this.manifest.white, localX, RT_PAD_PX + y * TILE_SIZE, {
+              originX: 0,
+              originY: 0,
+              tint: 0x0a1a3a,
+              alpha: 0.45,
+            });
+          }
+          continue;
+        }
+
         const south = getWorldTile(tx, ty + 1);
         const strips = wallStripsFor(level, levelFor(south));
-
-        const localX = x * TILE_SIZE;
         const topY = RT_PAD_PX + projectY(y * TILE_SIZE, level);
 
         const wallFrame = this.wallsManifest.terrain[tile.terrain];
@@ -155,10 +202,21 @@ class WorldScene extends Phaser.Scene {
               originY: 0,
             });
           }
+          // Oclusão ambiente na base do paredão: quanto mais alto, mais escuro.
+          rt.stamp("tiles", this.manifest.white, localX, topY + TILE_SIZE + (strips - 1) * HALF_STEP_PX, {
+            originX: 0,
+            originY: 0,
+            scaleY: 0.5,
+            tint: 0x000000,
+            alpha: Math.min(0.35, 0.08 + strips * 0.03),
+          });
         }
+
+        const b = Math.round(255 * brightnessFor(level));
         rt.stamp("tiles", this.frameFor(tile.terrain, tx, ty), localX, topY, {
           originX: 0,
           originY: 0,
+          tint: (b << 16) | (b << 8) | b,
         });
       }
     }
@@ -189,6 +247,8 @@ class WorldScene extends Phaser.Scene {
   }
 
   update(_time: number, delta: number) {
+    this.waterLayer.setTilePosition(this.cameras.main.scrollX, this.cameras.main.scrollY);
+
     let dx = 0;
     let dy = 0;
     if (this.cursors.W.isDown) dy -= 1;
@@ -213,6 +273,20 @@ class WorldScene extends Phaser.Scene {
       this.worldX += (dx / norm) * speed;
       this.worldY += (dy / norm) * speed;
 
+      const now = performance.now();
+      if (this.onMove && now - this.lastEmit > 50) {
+        this.lastEmit = now;
+        this.onMove(this.worldX, this.worldY);
+      }
+    }
+
+    // Correnteza: a água empurra quem está nela (jogador hoje; NPCs futuros
+    // usam a mesma currentFor). Sempre mais fraca que nadar — anti-trava.
+    const cur = currentFor(WORLD_SEED, tx, ty);
+    const inWater = cur.vx !== 0 || cur.vy !== 0;
+    if (inWater) {
+      this.worldX += cur.vx * delta;
+      this.worldY += cur.vy * delta;
       const now = performance.now();
       if (this.onMove && now - this.lastEmit > 50) {
         this.lastEmit = now;
@@ -249,8 +323,14 @@ class WorldScene extends Phaser.Scene {
     // ATENÇÃO (futuro): água animada, NPCs ou outros jogadores visíveis
     // são novas fontes de sujeira — inclua-as aqui ou o mundo congela.
     const levelSettling = this.renderLevel !== targetLevel;
-    if (dx !== 0 || dy !== 0 || chunksChanged || levelSettling) {
+    if (dx !== 0 || dy !== 0 || chunksChanged || levelSettling || inWater) {
       this.cleanFrames = 0;
+      this.sleepAfterSettle = false;
+    } else if (this.sleepAfterSettle) {
+      // Frame limpo logo após um tick de água: mostrou o frame novo, dorme já.
+      this.sleepAfterSettle = false;
+      this.cleanFrames = 0;
+      this.game.loop.sleep();
     } else if (++this.cleanFrames >= 30) {
       this.cleanFrames = 0;
       this.game.loop.sleep();

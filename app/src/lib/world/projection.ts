@@ -39,3 +39,9 @@ export function isOccluded(playerLevel: number, southLevels: number[][]): boolea
   }
   return false;
 }
+
+/** Bake-time top shading: valleys darker, peaks full brightness. */
+export function brightnessFor(level: number): number {
+  const l = Math.min(MAX_LEVEL, Math.max(0, level));
+  return 0.82 + 0.18 * (l / MAX_LEVEL);
+}

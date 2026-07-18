@@ -35,7 +35,8 @@
     "river_0",
     "river_1",
     "river_2",
-    "river_3"
+    "river_3",
+    "white"
   ],
   "terrain": {
     "grass": [
@@ -113,5 +114,6 @@
       32,
       33
     ]
-  }
+  },
+  "white": 34
 }
