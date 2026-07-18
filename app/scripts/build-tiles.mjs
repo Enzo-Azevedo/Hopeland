@@ -82,6 +82,18 @@ for (const [terrain, hex] of [
   TERRAIN[terrain] = [WATER_FRAMES[terrain][0]];
 }
 
+// Solid white utility frame (tinted at stamp time: deep-water veil,
+// wall-base occlusion). Appended last so existing indices never shift.
+FRAME_DEFS.push({
+  name: "white",
+  file: null,
+  make: async () =>
+    sharp({ create: { width: TILE, height: TILE, channels: 4, background: "#ffffff" } })
+      .png()
+      .toBuffer(),
+});
+const WHITE_INDEX = FRAME_DEFS.length - 1;
+
 const buffers = [];
 for (const d of FRAME_DEFS) buffers.push(await d.make(d.file));
 
@@ -109,6 +121,7 @@ await writeFile(
       frames: FRAME_DEFS.map((d) => d.name),
       terrain: TERRAIN,
       waterFrames: WATER_FRAMES,
+      white: WHITE_INDEX,
     },
     null,
     2,
