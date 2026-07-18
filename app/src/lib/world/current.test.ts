@@ -111,3 +111,46 @@ describe("upstream momentum (metade da força do tile anterior)", () => {
     expect(aligned / pairs).toBeGreaterThan(0.6);
   });
 });
+
+describe("bank deflection (fluxo diagonal seguindo o canal)", () => {
+  const OCTANTS: ReadonlyArray<readonly [number, number]> = [
+    [1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1], [0, -1], [1, -1],
+  ];
+
+  function flowTarget(tx: number, ty: number): [number, number] {
+    const v = currentFor(WORLD_SEED, tx, ty);
+    const ang = Math.atan2(v.vy, v.vx);
+    const oct = ((Math.round(ang / (Math.PI / 4)) % 8) + 8) % 8;
+    const [ox, oy] = OCTANTS[oct]!;
+    return [tx + ox, ty + oy];
+  }
+
+  test("river flow points into water, not into the bank", () => {
+    let rivers = 0;
+    let intoWater = 0;
+    for (let y = -600; y <= 600 && rivers < 120; y += 3) {
+      for (let x = -600; x <= 600 && rivers < 120; x += 3) {
+        if (getWorldTile(x, y).terrain !== "river") continue;
+        const [nx, ny] = flowTarget(x, y);
+        if (WATER.has(getWorldTile(nx, ny).terrain)) intoWater++;
+        rivers++;
+      }
+    }
+    expect(rivers).toBeGreaterThan(50);
+    expect(intoWater / rivers).toBeGreaterThan(0.85);
+  });
+
+  test("deflection preserves the anti-trap cap and determinism", () => {
+    let checked = 0;
+    for (let y = -400; y <= 400 && checked < 150; y += 5) {
+      for (let x = -400; x <= 400 && checked < 150; x += 5) {
+        if (!WATER.has(getWorldTile(x, y).terrain)) continue;
+        const a = currentFor(WORLD_SEED, x, y);
+        expect(currentFor(WORLD_SEED, x, y)).toEqual(a);
+        expect(Math.hypot(a.vx, a.vy)).toBeLessThanOrEqual(MAX_CURRENT + 1e-9);
+        checked++;
+      }
+    }
+    expect(checked).toBe(150);
+  });
+});
