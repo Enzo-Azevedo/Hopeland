@@ -3,7 +3,11 @@
 // amostragem bilinear manual do campo toroidal. GLSL ES 1.0.
 
 export const WATER_FRAG = `
+#ifdef GL_FRAGMENT_PRECISION_HIGH
+precision highp float;
+#else
 precision mediump float;
+#endif
 
 uniform float uTime;       // ms de tempo RENDERIZADO (congela dormindo)
 uniform vec2  uScroll;     // scroll da câmera em px de mundo
