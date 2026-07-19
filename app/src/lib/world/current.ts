@@ -280,3 +280,42 @@ export function currentFor(
   }
   return { vx, vy };
 }
+
+const SPRING_RADIUS = 12; // chebyshev, pelo canal conectado
+const SPRING_VISIT_MAX = 80;
+
+/**
+ * Nascente única por canal (mecânica do dono): uma cabeça de cadeia (sem
+ * vizinho de água mais alto) só é nascente se for a cabeça lexicograficamente
+ * mínima — menor (ty, tx) — entre as cabeças alcançáveis pelo canal dentro
+ * do raio. Determinística e limitada.
+ */
+export function isSpring(seed: string, tx: number, ty: number): boolean {
+  if (strengthAt(seed, tx, ty) === undefined) return false;
+  if (upstreamOf(seed, tx, ty) !== null) return false;
+
+  let bestTx = tx;
+  let bestTy = ty;
+  const seen = new Set<string>([`${tx},${ty}`]);
+  const queue: [number, number][] = [[tx, ty]];
+  while (queue.length > 0 && seen.size < SPRING_VISIT_MAX) {
+    const [cx, cy] = queue.shift()!;
+    for (const [ox, oy] of NEIGHBORS) {
+      const nx = cx + ox;
+      const ny = cy + oy;
+      if (Math.max(Math.abs(nx - tx), Math.abs(ny - ty)) > SPRING_RADIUS) continue;
+      const key = `${nx},${ny}`;
+      if (seen.has(key)) continue;
+      if (strengthAt(seed, nx, ny) === undefined) continue;
+      seen.add(key);
+      queue.push([nx, ny]);
+      if (upstreamOf(seed, nx, ny) === null) {
+        if (ny < bestTy || (ny === bestTy && nx < bestTx)) {
+          bestTx = nx;
+          bestTy = ny;
+        }
+      }
+    }
+  }
+  return bestTx === tx && bestTy === ty;
+}

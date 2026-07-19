@@ -246,3 +246,60 @@ describe("cancelamento de fluxos opostos", () => {
     expect(checked).toBe(200);
   });
 });
+
+import { isSpring } from "./current";
+
+describe("isSpring (nascente única por canal)", () => {
+  test("land is never a spring; springs are chain heads", () => {
+    let landChecked = 0;
+    for (let y = -200; y <= 200 && landChecked < 20; y += 11) {
+      for (let x = -200; x <= 200 && landChecked < 20; x += 11) {
+        if (!WATER.has(getWorldTile(x, y).terrain)) {
+          expect(isSpring(WORLD_SEED, x, y)).toBe(false);
+          landChecked++;
+        }
+      }
+    }
+    expect(landChecked).toBe(20);
+    let springs = 0;
+    for (let y = -400; y <= 400 && springs < 10; y += 4) {
+      for (let x = -400; x <= 400 && springs < 10; x += 4) {
+        if (!isSpring(WORLD_SEED, x, y)) continue;
+        expect(upstreamOf(WORLD_SEED, x, y)).toBe(null);
+        springs++;
+      }
+    }
+    expect(springs).toBeGreaterThan(2);
+  });
+
+  test("two heads in the same nearby channel yield exactly one spring", () => {
+    const heads: [number, number][] = [];
+    for (let y = -400; y <= 400 && heads.length < 60; y += 2) {
+      for (let x = -400; x <= 400 && heads.length < 60; x += 2) {
+        if (!WATER.has(getWorldTile(x, y).terrain)) continue;
+        if (upstreamOf(WORLD_SEED, x, y) === null) heads.push([x, y]);
+      }
+    }
+    let closePairs = 0;
+    for (let i = 0; i < heads.length; i++) {
+      for (let j = i + 1; j < heads.length; j++) {
+        const [ax, ay] = heads[i]!;
+        const [bx, by] = heads[j]!;
+        if (Math.max(Math.abs(ax - bx), Math.abs(ay - by)) > 8) continue;
+        closePairs++;
+        const springs =
+          Number(isSpring(WORLD_SEED, ax, ay)) + Number(isSpring(WORLD_SEED, bx, by));
+        expect(springs).toBeLessThanOrEqual(1);
+      }
+    }
+    expect(closePairs).toBeGreaterThan(3);
+  });
+
+  test("is deterministic", () => {
+    for (let i = 0; i < 30; i++) {
+      const x = i * 17 - 250;
+      const y = i * 11 - 150;
+      expect(isSpring(WORLD_SEED, x, y)).toBe(isSpring(WORLD_SEED, x, y));
+    }
+  });
+});
