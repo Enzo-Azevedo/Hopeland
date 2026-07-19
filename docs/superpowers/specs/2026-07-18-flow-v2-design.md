@@ -52,7 +52,7 @@ encontro chega a **0**, e a redução se propaga para trás nos dois lados,
 limitada pela força do lado oposto à mesma distância do encontro.
 
 - Implementação (pura, pós-deflexão): caminhada a jusante limitada
-  (**6 passos**) seguindo o octante do fluxo; se o tile seguinte tem fluxo
+  (**3 passos** — calibrado: com 6, meandros comuns disparavam falsos encontros e o fluxo parava de seguir o canal; varredura 1-6 documentada no task report) seguindo o octante do fluxo; se o tile seguinte tem fluxo
   com `dot < 0` (oposto), achou o ponto de encontro à distância `k`.
 - Redução: `v'(t) = v(t) · max(0, 1 − |v_oposto(k)| / |v(t)|)` onde
   `v_oposto(k)` é a força do tile do lado oposto à distância `k` do
