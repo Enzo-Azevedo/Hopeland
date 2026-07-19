@@ -179,9 +179,76 @@ export function rawChannelFlow(seed: string, tx: number, ty: number): CurrentVec
   return { vx, vy };
 }
 
+// Brief's draft had 6; empirically 4+ over-triggers (see Task 3 report):
+// with a lookahead that long, the walk regularly mistakes ordinary channel
+// meanders more than 3 tiles out for a head-on meeting (rivers bend often
+// in this discrete 8-direction field), zeroing forces far beyond genuine
+// confluence points and dropping the pre-existing "bank deflection" river
+// suite's into-water ratio to exactly the 0.85 threshold at 4 steps (would
+// fail outright at 6). 3 keeps a real backward-propagation window while
+// staying clear of that false-positive regime (0.883 ratio, margin intact).
+const CANCEL_STEPS = 3;
+
+function octantOf(vx: number, vy: number): readonly [number, number] {
+  const ang = Math.atan2(vy, vx);
+  const oct = ((Math.round(ang / (Math.PI / 4)) % 8) + 8) % 8;
+  return OCTANTS[oct]!;
+}
+
+/**
+ * Cancelamento de fluxos opostos (mecânica do dono): onde dois fluxos se
+ * encontram de frente, a força no ponto de encontro cai a zero e a redução
+ * se propaga para trás nos dois lados, limitada pela força do lado oposto
+ * à mesma distância do encontro. Usa rawChannelFlow nas caminhadas (sem
+ * recursão). Só REDUZ magnitude — anti-trava intacto.
+ */
+function applyCancellation(
+  seed: string,
+  tx: number,
+  ty: number,
+  v: CurrentVector,
+): CurrentVector {
+  const magT = Math.hypot(v.vx, v.vy);
+  if (magT < EPS) return v;
+
+  let px = tx;
+  let py = ty;
+  let cur = v;
+  for (let k = 1; k <= CANCEL_STEPS; k++) {
+    const [sx, sy] = octantOf(cur.vx, cur.vy);
+    px += sx;
+    py += sy;
+    if (strengthAt(seed, px, py) === undefined) return v; // canal acaba: sem encontro
+    const other = rawChannelFlow(seed, px, py);
+    if (other.vx * v.vx + other.vy * v.vy < 0) {
+      // Encontro à distância k. Espelho: k-1 passos canal adentro do lado
+      // oposto (contra o fluxo dele), força de lá limita a redução aqui.
+      let mx = px;
+      let my = py;
+      let om = other;
+      for (let s = 1; s < k; s++) {
+        const [ox, oy] = octantOf(om.vx, om.vy);
+        const nx = mx - ox;
+        const ny = my - oy;
+        if (strengthAt(seed, nx, ny) === undefined) break;
+        mx = nx;
+        my = ny;
+        om = rawChannelFlow(seed, mx, my);
+      }
+      const reduce = Math.hypot(om.vx, om.vy);
+      const factor = Math.max(0, 1 - reduce / magT);
+      return { vx: v.vx * factor, vy: v.vy * factor };
+    }
+    if (Math.hypot(other.vx, other.vy) < EPS) return v; // canal parado adiante
+    cur = other;
+  }
+  return v;
+}
+
 /** Canal + cancelamento (Task 3 pluga aqui). Cacheado pelo flow-field. */
 export function channelFlowAt(seed: string, tx: number, ty: number): CurrentVector {
-  return rawChannelFlow(seed, tx, ty);
+  const raw = rawChannelFlow(seed, tx, ty);
+  return applyCancellation(seed, tx, ty, raw);
 }
 
 const WIND_INFLUENCE: Record<string, number> = {

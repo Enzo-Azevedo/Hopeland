@@ -204,3 +204,45 @@ describe("channel/wind split", () => {
     expect(checked).toBe(40);
   });
 });
+
+describe("cancelamento de fluxos opostos", () => {
+  test("converging neighbors lose force vs the raw channel and never gain", () => {
+    let converging = 0;
+    for (let y = -600; y <= 600 && converging < 25; y += 2) {
+      for (let x = -600; x <= 600 && converging < 25; x += 2) {
+        if (!WATER.has(getWorldTile(x, y).terrain)) continue;
+        const raw = rawChannelFlow(WORLD_SEED, x, y);
+        const rawMag = Math.hypot(raw.vx, raw.vy);
+        if (rawMag < 1e-4) continue;
+        // vizinho no octante do fluxo com fluxo oposto?
+        const ang = Math.atan2(raw.vy, raw.vx);
+        const oct = ((Math.round(ang / (Math.PI / 4)) % 8) + 8) % 8;
+        const OCT: ReadonlyArray<readonly [number, number]> = [
+          [1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1], [0, -1], [1, -1],
+        ];
+        const [sx, sy] = OCT[oct]!;
+        const nb = rawChannelFlow(WORLD_SEED, x + sx, y + sy);
+        if (nb.vx * raw.vx + nb.vy * raw.vy >= 0) continue;
+        converging++;
+        const ch = channelFlowAt(WORLD_SEED, x, y);
+        expect(Math.hypot(ch.vx, ch.vy)).toBeLessThanOrEqual(rawMag + 1e-9);
+        expect(Math.hypot(ch.vx, ch.vy)).toBeLessThan(rawMag - 1e-6);
+      }
+    }
+    expect(converging).toBeGreaterThan(5);
+  });
+
+  test("channel flow never exceeds raw magnitude anywhere (only reduces)", () => {
+    let checked = 0;
+    for (let y = -400; y <= 400 && checked < 200; y += 5) {
+      for (let x = -400; x <= 400 && checked < 200; x += 5) {
+        if (!WATER.has(getWorldTile(x, y).terrain)) continue;
+        const raw = rawChannelFlow(WORLD_SEED, x, y);
+        const ch = channelFlowAt(WORLD_SEED, x, y);
+        expect(Math.hypot(ch.vx, ch.vy)).toBeLessThanOrEqual(Math.hypot(raw.vx, raw.vy) + 1e-9);
+        checked++;
+      }
+    }
+    expect(checked).toBe(200);
+  });
+});
