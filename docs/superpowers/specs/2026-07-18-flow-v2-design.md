@@ -35,7 +35,7 @@ movimento das ondas E o empurrão do oceano; (2) **nascente única por canal**;
 
 ## 2. Nascente única por canal (`current.ts`)
 
-- `isSpring(seed, tx, ty): boolean` — oficial. Candidata = tile de água sem
+- `isSpring(seed, tx, ty): boolean` — oficial. Candidata = tile de RIO sem
   vizinho de água mais alto (cabeça de cadeia). É nascente só se, numa
   caminhada limitada pelo canal (**raio 12 tiles**, água conectada,
   8-vizinhança, visitação limitada a ~80 tiles), não houver outra cabeça

@@ -291,7 +291,9 @@ const SPRING_VISIT_MAX = 80;
  * do raio. Determinística e limitada.
  */
 export function isSpring(seed: string, tx: number, ty: number): boolean {
-  if (strengthAt(seed, tx, ty) === undefined) return false;
+  // Nascente é conceito de RIO: no oceano plano todo tile é "cabeça"
+  // (nenhum vizinho mais alto), então a busca fica restrita ao canal de rio.
+  if (getTile(seed, tx, ty).terrain !== "river") return false;
   if (upstreamOf(seed, tx, ty) !== null) return false;
 
   let bestTx = tx;
@@ -306,7 +308,7 @@ export function isSpring(seed: string, tx: number, ty: number): boolean {
       if (Math.max(Math.abs(nx - tx), Math.abs(ny - ty)) > SPRING_RADIUS) continue;
       const key = `${nx},${ny}`;
       if (seen.has(key)) continue;
-      if (strengthAt(seed, nx, ny) === undefined) continue;
+      if (getTile(seed, nx, ny).terrain !== "river") continue;
       seen.add(key);
       queue.push([nx, ny]);
       if (upstreamOf(seed, nx, ny) === null) {
