@@ -17,7 +17,8 @@ import { FatigueTracker, TERRAIN_SPEED } from "@/lib/world/movement";
 import { chunkKey, planChunkUpdates, tileToChunk } from "@/lib/world/chunk-manager";
 import { pickVariant } from "@/lib/world/tile-variants";
 import { brightnessFor, isOccluded, levelFor, projectY, wallStripsFor } from "@/lib/world/projection";
-import { currentFor } from "@/lib/world/current";
+import { currentFor, MAX_CURRENT } from "@/lib/world/current";
+import { windAt } from "@/lib/world/wind";
 import { FIELD_TILES, encodeFlow, fieldTexel, flowAt, kindOf } from "@/lib/world/flow-field";
 import { WATER_FRAG } from "@/lib/world/water-shader";
 
@@ -68,6 +69,7 @@ class WorldScene extends Phaser.Scene {
   private flowCanvas!: Phaser.Textures.CanvasTexture;
   private flowQueue: { cx: number; cy: number; row: number }[] = [];
   private renderedTime = 0;
+  private windNow = { vx: 0, vy: 0 };
   private waterQuad!: Phaser.GameObjects.Shader;
   private waterInterval = 0;
   private sleepAfterSettle = false;
@@ -103,6 +105,10 @@ class WorldScene extends Phaser.Scene {
       setUniform("uTime", this.renderedTime);
       setUniform("uScroll", [this.cameras.main.scrollX, this.cameras.main.scrollY]);
       setUniform("uResolution", [this.scale.width, this.scale.height]);
+      setUniform("uWind", [
+        this.windNow.vx / MAX_CURRENT,
+        this.windNow.vy / MAX_CURRENT,
+      ]);
       setUniform("uFlowTex", 0);
     };
 
@@ -277,6 +283,8 @@ class WorldScene extends Phaser.Scene {
 
   update(time: number, delta: number) {
     this.renderedTime += delta;
+    // Vento de época: mesmo valor para todos os jogadores, sem sincronização.
+    this.windNow = windAt(WORLD_SEED, Date.now());
 
     let dx = 0;
     let dy = 0;
@@ -311,7 +319,7 @@ class WorldScene extends Phaser.Scene {
 
     // Correnteza: a água empurra quem está nela (jogador hoje; NPCs futuros
     // usam a mesma currentFor). Sempre mais fraca que nadar — anti-trava.
-    const cur = currentFor(WORLD_SEED, tx, ty);
+    const cur = currentFor(WORLD_SEED, tx, ty, Date.now());
     const inWater = cur.vx !== 0 || cur.vy !== 0;
     if (inWater) {
       // A correnteza nunca joga ninguém na terra: o eixo cujo destino

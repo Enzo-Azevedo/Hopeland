@@ -9,7 +9,7 @@
 // against the current wins, so it can never trap anyone (anti-trap).
 
 import { getElevation, getTile } from "./world-gen";
-import { Simplex2, hashString } from "./noise";
+import { windAt } from "./wind";
 
 export interface CurrentVector {
   vx: number;
@@ -30,7 +30,6 @@ const MOMENTUM = 0.5; // half of the upstream tile's force (owner spec)
 const UPSTREAM_STEPS = 4; // 1/2, 1/4, 1/8, 1/16 — beyond that it's noise
 const DEFLECT = 0.9; // 90% da força desvia quando a margem bloqueia (owner spec)
 const EPS = 1e-4;
-const DRIFT_SCALE = 80; // tiles per drift feature
 
 const OCTANTS: ReadonlyArray<readonly [number, number]> = [
   [1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1], [0, -1], [1, -1],
@@ -41,17 +40,6 @@ const NEIGHBORS: ReadonlyArray<readonly [number, number]> = [
   [-1, 0], [1, 0],
   [-1, 1], [0, 1], [1, 1],
 ];
-
-const driftCache = new Map<string, Simplex2>();
-
-function drift(seed: string): Simplex2 {
-  let d = driftCache.get(seed);
-  if (!d) {
-    d = new Simplex2((hashString(seed) ^ hashString("water-drift")) >>> 0);
-    driftCache.set(seed, d);
-  }
-  return d;
-}
 
 function strengthAt(seed: string, tx: number, ty: number): number | undefined {
   return STRENGTH[getTile(seed, tx, ty).terrain];
@@ -154,7 +142,12 @@ function deflectAtBanks(
   };
 }
 
-export function currentFor(seed: string, tx: number, ty: number): CurrentVector {
+/**
+ * Canal puro: geração + momento herdado + deflexão de margem. Sem
+ * cancelamento, vento ou deriva — só a força que o próprio canal produz,
+ * limitada ao teto do terreno (anti-trava).
+ */
+export function rawChannelFlow(seed: string, tx: number, ty: number): CurrentVector {
   const cap = strengthAt(seed, tx, ty);
   if (cap === undefined) return { vx: 0, vy: 0 };
 
@@ -179,14 +172,152 @@ export function currentFor(seed: string, tx: number, ty: number): CurrentVector 
   ({ vx, vy } = deflectAtBanks(seed, tx, ty, vx, vy, source));
 
   const mag = Math.hypot(vx, vy);
-  if (mag < EPS) {
-    // Mar aberto sem geração nem herança: deriva lenta determinística.
-    const angle = drift(seed).sample(tx / DRIFT_SCALE, ty / DRIFT_SCALE).value * Math.PI;
-    return { vx: Math.cos(angle) * cap, vy: Math.sin(angle) * cap };
-  }
   if (mag > cap) {
     // Anti-trava: nunca acima do teto do próprio terreno.
     return { vx: (vx / mag) * cap, vy: (vy / mag) * cap };
   }
   return { vx, vy };
+}
+
+// Brief's draft had 6; empirically 4+ over-triggers (see Task 3 report):
+// with a lookahead that long, the walk regularly mistakes ordinary channel
+// meanders more than 3 tiles out for a head-on meeting (rivers bend often
+// in this discrete 8-direction field), zeroing forces far beyond genuine
+// confluence points and dropping the pre-existing "bank deflection" river
+// suite's into-water ratio to exactly the 0.85 threshold at 4 steps (would
+// fail outright at 6). 3 keeps a real backward-propagation window while
+// staying clear of that false-positive regime (0.883 ratio, margin intact).
+const CANCEL_STEPS = 3;
+
+function octantOf(vx: number, vy: number): readonly [number, number] {
+  const ang = Math.atan2(vy, vx);
+  const oct = ((Math.round(ang / (Math.PI / 4)) % 8) + 8) % 8;
+  return OCTANTS[oct]!;
+}
+
+/**
+ * Cancelamento de fluxos opostos (mecânica do dono): onde dois fluxos se
+ * encontram de frente, a força no ponto de encontro cai a zero e a redução
+ * se propaga para trás nos dois lados, limitada pela força do lado oposto
+ * à mesma distância do encontro. Usa rawChannelFlow nas caminhadas (sem
+ * recursão). Só REDUZ magnitude — anti-trava intacto.
+ */
+function applyCancellation(
+  seed: string,
+  tx: number,
+  ty: number,
+  v: CurrentVector,
+): CurrentVector {
+  const magT = Math.hypot(v.vx, v.vy);
+  if (magT < EPS) return v;
+
+  let px = tx;
+  let py = ty;
+  let cur = v;
+  for (let k = 1; k <= CANCEL_STEPS; k++) {
+    const [sx, sy] = octantOf(cur.vx, cur.vy);
+    px += sx;
+    py += sy;
+    if (strengthAt(seed, px, py) === undefined) return v; // canal acaba: sem encontro
+    const other = rawChannelFlow(seed, px, py);
+    if (other.vx * v.vx + other.vy * v.vy < 0) {
+      // Encontro à distância k. Espelho: k-1 passos canal adentro do lado
+      // oposto (contra o fluxo dele), força de lá limita a redução aqui.
+      let mx = px;
+      let my = py;
+      let om = other;
+      for (let s = 1; s < k; s++) {
+        const [ox, oy] = octantOf(om.vx, om.vy);
+        const nx = mx - ox;
+        const ny = my - oy;
+        if (strengthAt(seed, nx, ny) === undefined) break;
+        mx = nx;
+        my = ny;
+        om = rawChannelFlow(seed, mx, my);
+      }
+      const reduce = Math.hypot(om.vx, om.vy);
+      const factor = Math.max(0, 1 - reduce / magT);
+      return { vx: v.vx * factor, vy: v.vy * factor };
+    }
+    if (Math.hypot(other.vx, other.vy) < EPS) return v; // canal parado adiante
+    cur = other;
+  }
+  return v;
+}
+
+/** Canal + cancelamento (Task 3 pluga aqui). Cacheado pelo flow-field. */
+export function channelFlowAt(seed: string, tx: number, ty: number): CurrentVector {
+  const raw = rawChannelFlow(seed, tx, ty);
+  return applyCancellation(seed, tx, ty, raw);
+}
+
+const WIND_INFLUENCE: Record<string, number> = {
+  deep_water: 1.0,
+  water: 0.5,
+  river: 0.1,
+};
+
+export function currentFor(
+  seed: string,
+  tx: number,
+  ty: number,
+  timeMs = 0,
+): CurrentVector {
+  const terrain = getTile(seed, tx, ty).terrain;
+  const cap = STRENGTH[terrain];
+  if (cap === undefined) return { vx: 0, vy: 0 };
+
+  const ch = channelFlowAt(seed, tx, ty);
+  const wind = windAt(seed, timeMs);
+  const infl = WIND_INFLUENCE[terrain] ?? 0;
+  let vx = ch.vx + wind.vx * infl;
+  let vy = ch.vy + wind.vy * infl;
+
+  const mag = Math.hypot(vx, vy);
+  if (mag > cap) {
+    vx = (vx / mag) * cap;
+    vy = (vy / mag) * cap;
+  }
+  return { vx, vy };
+}
+
+const SPRING_RADIUS = 12; // chebyshev, pelo canal conectado
+const SPRING_VISIT_MAX = 80;
+
+/**
+ * Nascente única por canal (mecânica do dono): uma cabeça de cadeia (sem
+ * vizinho de água mais alto) só é nascente se for a cabeça lexicograficamente
+ * mínima — menor (ty, tx) — entre as cabeças alcançáveis pelo canal dentro
+ * do raio. Determinística e limitada.
+ */
+export function isSpring(seed: string, tx: number, ty: number): boolean {
+  // Nascente é conceito de RIO: no oceano plano todo tile é "cabeça"
+  // (nenhum vizinho mais alto), então a busca fica restrita ao canal de rio.
+  if (getTile(seed, tx, ty).terrain !== "river") return false;
+  if (upstreamOf(seed, tx, ty) !== null) return false;
+
+  let bestTx = tx;
+  let bestTy = ty;
+  const seen = new Set<string>([`${tx},${ty}`]);
+  const queue: [number, number][] = [[tx, ty]];
+  while (queue.length > 0 && seen.size < SPRING_VISIT_MAX) {
+    const [cx, cy] = queue.shift()!;
+    for (const [ox, oy] of NEIGHBORS) {
+      const nx = cx + ox;
+      const ny = cy + oy;
+      if (Math.max(Math.abs(nx - tx), Math.abs(ny - ty)) > SPRING_RADIUS) continue;
+      const key = `${nx},${ny}`;
+      if (seen.has(key)) continue;
+      if (getTile(seed, nx, ny).terrain !== "river") continue;
+      seen.add(key);
+      queue.push([nx, ny]);
+      if (upstreamOf(seed, nx, ny) === null) {
+        if (ny < bestTy || (ny === bestTy && nx < bestTx)) {
+          bestTx = nx;
+          bestTy = ny;
+        }
+      }
+    }
+  }
+  return bestTx === tx && bestTy === ty;
 }

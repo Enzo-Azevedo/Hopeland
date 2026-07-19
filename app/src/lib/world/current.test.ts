@@ -154,3 +154,152 @@ describe("bank deflection (fluxo diagonal seguindo o canal)", () => {
     expect(checked).toBe(150);
   });
 });
+
+import { channelFlowAt, rawChannelFlow } from "./current";
+import { windAt } from "./wind";
+
+describe("channel/wind split", () => {
+  test("channel flow has no time dependence and matches flowAt's source", () => {
+    const a = channelFlowAt(WORLD_SEED, 37, -122);
+    expect(channelFlowAt(WORLD_SEED, 37, -122)).toEqual(a);
+  });
+
+  test("currentFor = channel + influenced wind, clamped", () => {
+    const t = 250_000;
+    const wind = windAt(WORLD_SEED, t);
+    let deepChecked = 0;
+    // deep_water is rare and clustered for WORLD_SEED (nothing within +-2000
+    // of spawn — confirmed by direct scan); (-1440, 2220) is a verified
+    // pocket, so we scan tightly around it instead of near the origin.
+    for (let y = 2070; y <= 2370 && deepChecked < 30; y += 1) {
+      for (let x = -1590; x <= -1290 && deepChecked < 30; x += 1) {
+        if (getWorldTile(x, y).terrain !== "deep_water") continue;
+        const ch = channelFlowAt(WORLD_SEED, x, y);
+        const cur = currentFor(WORLD_SEED, x, y, t);
+        const expectedX = ch.vx + wind.vx;
+        const expectedY = ch.vy + wind.vy;
+        const mag = Math.hypot(expectedX, expectedY);
+        const cap = 0.02;
+        const scale = mag > cap ? cap / mag : 1;
+        expect(Math.abs(cur.vx - expectedX * scale)).toBeLessThan(1e-9);
+        expect(Math.abs(cur.vy - expectedY * scale)).toBeLessThan(1e-9);
+        deepChecked++;
+      }
+    }
+    expect(deepChecked).toBe(30);
+  });
+
+  test("river push is channel-dominated (wind influence 0.1)", () => {
+    let checked = 0;
+    for (let y = -600; y <= 600 && checked < 40; y += 3) {
+      for (let x = -600; x <= 600 && checked < 40; x += 3) {
+        if (getWorldTile(x, y).terrain !== "river") continue;
+        const ch = channelFlowAt(WORLD_SEED, x, y);
+        const cur = currentFor(WORLD_SEED, x, y, 250_000);
+        // vento no rio é no máximo 0.1 * WIND_MAX = 0.002
+        expect(Math.hypot(cur.vx - ch.vx, cur.vy - ch.vy)).toBeLessThanOrEqual(0.002 + 1e-9);
+        checked++;
+      }
+    }
+    expect(checked).toBe(40);
+  });
+});
+
+describe("cancelamento de fluxos opostos", () => {
+  test("converging neighbors lose force vs the raw channel and never gain", () => {
+    let converging = 0;
+    for (let y = -600; y <= 600 && converging < 25; y += 2) {
+      for (let x = -600; x <= 600 && converging < 25; x += 2) {
+        if (!WATER.has(getWorldTile(x, y).terrain)) continue;
+        const raw = rawChannelFlow(WORLD_SEED, x, y);
+        const rawMag = Math.hypot(raw.vx, raw.vy);
+        if (rawMag < 1e-4) continue;
+        // vizinho no octante do fluxo com fluxo oposto?
+        const ang = Math.atan2(raw.vy, raw.vx);
+        const oct = ((Math.round(ang / (Math.PI / 4)) % 8) + 8) % 8;
+        const OCT: ReadonlyArray<readonly [number, number]> = [
+          [1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1], [0, -1], [1, -1],
+        ];
+        const [sx, sy] = OCT[oct]!;
+        const nb = rawChannelFlow(WORLD_SEED, x + sx, y + sy);
+        if (nb.vx * raw.vx + nb.vy * raw.vy >= 0) continue;
+        converging++;
+        const ch = channelFlowAt(WORLD_SEED, x, y);
+        expect(Math.hypot(ch.vx, ch.vy)).toBeLessThanOrEqual(rawMag + 1e-9);
+        expect(Math.hypot(ch.vx, ch.vy)).toBeLessThan(rawMag - 1e-6);
+      }
+    }
+    expect(converging).toBeGreaterThan(5);
+  });
+
+  test("channel flow never exceeds raw magnitude anywhere (only reduces)", () => {
+    let checked = 0;
+    for (let y = -400; y <= 400 && checked < 200; y += 5) {
+      for (let x = -400; x <= 400 && checked < 200; x += 5) {
+        if (!WATER.has(getWorldTile(x, y).terrain)) continue;
+        const raw = rawChannelFlow(WORLD_SEED, x, y);
+        const ch = channelFlowAt(WORLD_SEED, x, y);
+        expect(Math.hypot(ch.vx, ch.vy)).toBeLessThanOrEqual(Math.hypot(raw.vx, raw.vy) + 1e-9);
+        checked++;
+      }
+    }
+    expect(checked).toBe(200);
+  });
+});
+
+import { isSpring } from "./current";
+
+describe("isSpring (nascente única por canal)", () => {
+  test("land is never a spring; springs are chain heads", () => {
+    let landChecked = 0;
+    for (let y = -200; y <= 200 && landChecked < 20; y += 11) {
+      for (let x = -200; x <= 200 && landChecked < 20; x += 11) {
+        if (!WATER.has(getWorldTile(x, y).terrain)) {
+          expect(isSpring(WORLD_SEED, x, y)).toBe(false);
+          landChecked++;
+        }
+      }
+    }
+    expect(landChecked).toBe(20);
+    let springs = 0;
+    for (let y = -400; y <= 400 && springs < 10; y += 4) {
+      for (let x = -400; x <= 400 && springs < 10; x += 4) {
+        if (!isSpring(WORLD_SEED, x, y)) continue;
+        expect(upstreamOf(WORLD_SEED, x, y)).toBe(null);
+        springs++;
+      }
+    }
+    expect(springs).toBeGreaterThan(2);
+  });
+
+  test("two heads in the same nearby channel yield exactly one spring", () => {
+    const heads: [number, number][] = [];
+    for (let y = -400; y <= 400 && heads.length < 60; y += 2) {
+      for (let x = -400; x <= 400 && heads.length < 60; x += 2) {
+        if (!WATER.has(getWorldTile(x, y).terrain)) continue;
+        if (upstreamOf(WORLD_SEED, x, y) === null) heads.push([x, y]);
+      }
+    }
+    let closePairs = 0;
+    for (let i = 0; i < heads.length; i++) {
+      for (let j = i + 1; j < heads.length; j++) {
+        const [ax, ay] = heads[i]!;
+        const [bx, by] = heads[j]!;
+        if (Math.max(Math.abs(ax - bx), Math.abs(ay - by)) > 8) continue;
+        closePairs++;
+        const springs =
+          Number(isSpring(WORLD_SEED, ax, ay)) + Number(isSpring(WORLD_SEED, bx, by));
+        expect(springs).toBeLessThanOrEqual(1);
+      }
+    }
+    expect(closePairs).toBeGreaterThan(3);
+  });
+
+  test("is deterministic", () => {
+    for (let i = 0; i < 30; i++) {
+      const x = i * 17 - 250;
+      const y = i * 11 - 150;
+      expect(isSpring(WORLD_SEED, x, y)).toBe(isSpring(WORLD_SEED, x, y));
+    }
+  });
+});

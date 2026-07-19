@@ -12,6 +12,7 @@ precision mediump float;
 uniform float uTime;       // ms de tempo RENDERIZADO (congela dormindo)
 uniform vec2  uScroll;     // scroll da câmera em px de mundo
 uniform vec2  uResolution; // tamanho do quad/viewport em px
+uniform vec2  uWind;       // vento global, em unidades de MAX_CURRENT
 uniform sampler2D uFlowTex;
 
 const float TILE = 32.0;
@@ -52,6 +53,12 @@ void main(void) {
 
   vec4 texel = fieldTexelAt(tile);
   vec2 flow = (texel.rg * 255.0 - 128.0) / 127.0; // [-1,1] por componente
+
+  // Composição canal + vento (mesma regra do gameplay):
+  // deep 1.0, costa 0.5, rio 0.1 — B = kind*85/255.
+  float kindB = texel.b;
+  float infl = kindB < 0.5 ? 1.0 : (kindB < 0.84 ? 0.5 : 0.1);
+  flow += uWind * infl;
 
   // Bilinear manual do campo para profundidade (B) e máscara de água (A).
   vec2 tpos = snapped / TILE - 0.5;

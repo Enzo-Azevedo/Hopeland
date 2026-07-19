@@ -1,9 +1,10 @@
 // Per-tile water flow samples for the water shader, encoded for a toroidal
-// data texture. Uses the REAL gameplay current (currentFor) so what the
-// player sees is exactly what pushes them. The world is static, so samples
-// cache permanently.
+// data texture. Uses the channel-only flow (channelFlowAt) — the static
+// part of the current, without wind — since the world is static and
+// samples cache permanently; wind's time dependence isn't baked into this
+// texture.
 
-import { currentFor, MAX_CURRENT } from "./current";
+import { channelFlowAt, MAX_CURRENT } from "./current";
 import { getTile } from "./world-gen";
 
 export const FIELD_TILES = 160; // 5x5 chunk ring * 32 tiles
@@ -37,7 +38,7 @@ export function flowAt(seed: string, tx: number, ty: number): FlowSample {
   const sample: FlowSample =
     kind === 0
       ? { vx: 0, vy: 0, kind }
-      : { ...currentFor(seed, tx, ty), kind };
+      : { ...channelFlowAt(seed, tx, ty), kind };
   cache.set(key, sample);
   return sample;
 }
