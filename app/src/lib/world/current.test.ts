@@ -154,3 +154,53 @@ describe("bank deflection (fluxo diagonal seguindo o canal)", () => {
     expect(checked).toBe(150);
   });
 });
+
+import { channelFlowAt, rawChannelFlow } from "./current";
+import { windAt } from "./wind";
+
+describe("channel/wind split", () => {
+  test("channel flow has no time dependence and matches flowAt's source", () => {
+    const a = channelFlowAt(WORLD_SEED, 37, -122);
+    expect(channelFlowAt(WORLD_SEED, 37, -122)).toEqual(a);
+  });
+
+  test("currentFor = channel + influenced wind, clamped", () => {
+    const t = 250_000;
+    const wind = windAt(WORLD_SEED, t);
+    let deepChecked = 0;
+    // deep_water is rare and clustered for WORLD_SEED (nothing within +-2000
+    // of spawn — confirmed by direct scan); (-1440, 2220) is a verified
+    // pocket, so we scan tightly around it instead of near the origin.
+    for (let y = 2070; y <= 2370 && deepChecked < 30; y += 1) {
+      for (let x = -1590; x <= -1290 && deepChecked < 30; x += 1) {
+        if (getWorldTile(x, y).terrain !== "deep_water") continue;
+        const ch = channelFlowAt(WORLD_SEED, x, y);
+        const cur = currentFor(WORLD_SEED, x, y, t);
+        const expectedX = ch.vx + wind.vx;
+        const expectedY = ch.vy + wind.vy;
+        const mag = Math.hypot(expectedX, expectedY);
+        const cap = 0.02;
+        const scale = mag > cap ? cap / mag : 1;
+        expect(Math.abs(cur.vx - expectedX * scale)).toBeLessThan(1e-9);
+        expect(Math.abs(cur.vy - expectedY * scale)).toBeLessThan(1e-9);
+        deepChecked++;
+      }
+    }
+    expect(deepChecked).toBe(30);
+  });
+
+  test("river push is channel-dominated (wind influence 0.1)", () => {
+    let checked = 0;
+    for (let y = -600; y <= 600 && checked < 40; y += 3) {
+      for (let x = -600; x <= 600 && checked < 40; x += 3) {
+        if (getWorldTile(x, y).terrain !== "river") continue;
+        const ch = channelFlowAt(WORLD_SEED, x, y);
+        const cur = currentFor(WORLD_SEED, x, y, 250_000);
+        // vento no rio é no máximo 0.1 * WIND_MAX = 0.002
+        expect(Math.hypot(cur.vx - ch.vx, cur.vy - ch.vy)).toBeLessThanOrEqual(0.002 + 1e-9);
+        checked++;
+      }
+    }
+    expect(checked).toBe(40);
+  });
+});

@@ -9,7 +9,7 @@
 // against the current wins, so it can never trap anyone (anti-trap).
 
 import { getElevation, getTile } from "./world-gen";
-import { Simplex2, hashString } from "./noise";
+import { windAt } from "./wind";
 
 export interface CurrentVector {
   vx: number;
@@ -30,7 +30,6 @@ const MOMENTUM = 0.5; // half of the upstream tile's force (owner spec)
 const UPSTREAM_STEPS = 4; // 1/2, 1/4, 1/8, 1/16 — beyond that it's noise
 const DEFLECT = 0.9; // 90% da força desvia quando a margem bloqueia (owner spec)
 const EPS = 1e-4;
-const DRIFT_SCALE = 80; // tiles per drift feature
 
 const OCTANTS: ReadonlyArray<readonly [number, number]> = [
   [1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1], [0, -1], [1, -1],
@@ -41,17 +40,6 @@ const NEIGHBORS: ReadonlyArray<readonly [number, number]> = [
   [-1, 0], [1, 0],
   [-1, 1], [0, 1], [1, 1],
 ];
-
-const driftCache = new Map<string, Simplex2>();
-
-function drift(seed: string): Simplex2 {
-  let d = driftCache.get(seed);
-  if (!d) {
-    d = new Simplex2((hashString(seed) ^ hashString("water-drift")) >>> 0);
-    driftCache.set(seed, d);
-  }
-  return d;
-}
 
 function strengthAt(seed: string, tx: number, ty: number): number | undefined {
   return STRENGTH[getTile(seed, tx, ty).terrain];
@@ -154,7 +142,12 @@ function deflectAtBanks(
   };
 }
 
-export function currentFor(seed: string, tx: number, ty: number): CurrentVector {
+/**
+ * Canal puro: geração + momento herdado + deflexão de margem. Sem
+ * cancelamento, vento ou deriva — só a força que o próprio canal produz,
+ * limitada ao teto do terreno (anti-trava).
+ */
+export function rawChannelFlow(seed: string, tx: number, ty: number): CurrentVector {
   const cap = strengthAt(seed, tx, ty);
   if (cap === undefined) return { vx: 0, vy: 0 };
 
@@ -179,14 +172,44 @@ export function currentFor(seed: string, tx: number, ty: number): CurrentVector 
   ({ vx, vy } = deflectAtBanks(seed, tx, ty, vx, vy, source));
 
   const mag = Math.hypot(vx, vy);
-  if (mag < EPS) {
-    // Mar aberto sem geração nem herança: deriva lenta determinística.
-    const angle = drift(seed).sample(tx / DRIFT_SCALE, ty / DRIFT_SCALE).value * Math.PI;
-    return { vx: Math.cos(angle) * cap, vy: Math.sin(angle) * cap };
-  }
   if (mag > cap) {
     // Anti-trava: nunca acima do teto do próprio terreno.
     return { vx: (vx / mag) * cap, vy: (vy / mag) * cap };
+  }
+  return { vx, vy };
+}
+
+/** Canal + cancelamento (Task 3 pluga aqui). Cacheado pelo flow-field. */
+export function channelFlowAt(seed: string, tx: number, ty: number): CurrentVector {
+  return rawChannelFlow(seed, tx, ty);
+}
+
+const WIND_INFLUENCE: Record<string, number> = {
+  deep_water: 1.0,
+  water: 0.5,
+  river: 0.1,
+};
+
+export function currentFor(
+  seed: string,
+  tx: number,
+  ty: number,
+  timeMs = 0,
+): CurrentVector {
+  const terrain = getTile(seed, tx, ty).terrain;
+  const cap = STRENGTH[terrain];
+  if (cap === undefined) return { vx: 0, vy: 0 };
+
+  const ch = channelFlowAt(seed, tx, ty);
+  const wind = windAt(seed, timeMs);
+  const infl = WIND_INFLUENCE[terrain] ?? 0;
+  let vx = ch.vx + wind.vx * infl;
+  let vy = ch.vy + wind.vy * infl;
+
+  const mag = Math.hypot(vx, vy);
+  if (mag > cap) {
+    vx = (vx / mag) * cap;
+    vy = (vy / mag) * cap;
   }
   return { vx, vy };
 }
