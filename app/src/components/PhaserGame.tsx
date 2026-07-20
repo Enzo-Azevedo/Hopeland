@@ -67,7 +67,7 @@ class WorldScene extends Phaser.Scene {
   private fatigue = new FatigueTracker();
   private cleanFrames = 0;
   private flowCanvas!: Phaser.Textures.CanvasTexture;
-  private flowQueue: { cx: number; cy: number; row: number }[] = [];
+  private flowQueue: { cx: number; cy: number; row: number; col: number }[] = [];
   private renderedTime = 0;
   private windNow = { vx: 0, vy: 0 };
   private waterQuad!: Phaser.GameObjects.Shader;
@@ -250,9 +250,9 @@ class WorldScene extends Phaser.Scene {
     const slotY = fieldTexel(cy * CHUNK_SIZE);
     this.flowCanvas.context.putImageData(block, slotX, slotY);
     this.flowCanvas.refresh();
-    // Refinamento do fluxo (caro nos rios) em fila orçada, linha a linha.
+    // Refinamento do fluxo em fila orçada por tempo (ver update()).
     this.flowQueue = this.flowQueue.filter((q) => q.cx !== cx || q.cy !== cy);
-    this.flowQueue.push({ cx, cy, row: 0 });
+    this.flowQueue.push({ cx, cy, row: 0, col: 0 });
 
     // Phaser 4: stamp() only queues commands into the texture's command
     // buffer — nothing is drawn until render() flushes it ("You must do
@@ -365,44 +365,53 @@ class WorldScene extends Phaser.Scene {
 
     const chunksChanged = this.updateChunks();
 
-    // Orçamento de 256 tiles/frame para refinar o fluxo do shader.
-    let flowBudget = 256;
+    // Refinamento do fluxo: orçamento por TEMPO, não por contagem de tiles.
+    // O custo por tile varia demais para um teto de contagem ser seguro —
+    // terra é ~0,02ms, mas água com o cancelamento de fluxos opostos (v2)
+    // passa de 1ms/tile; um chunk de oceano inteiro (1024 tiles) mediu
+    // ~1000ms no total. Com o orçamento antigo de 256 tiles/frame isso virava
+    // ~260ms de tarefa única — a causa raiz do INP altíssimo/travamento nos
+    // primeiros segundos (confirmado no trace de performance e reproduzido
+    // em benchmark isolado). Processar em lotes pequenos e checar o relógio
+    // entre eles limita o pior caso do frame não importa o custo real do tile.
+    const FLOW_FRAME_BUDGET_MS = 4;
+    const FLOW_BATCH_TILES = 8;
+    const flowDeadline = performance.now() + FLOW_FRAME_BUDGET_MS;
     let flowDirty = false;
-    while (flowBudget > 0 && this.flowQueue.length > 0) {
+    flowLoop: while (this.flowQueue.length > 0) {
       const job = this.flowQueue[0]!;
       if (!this.chunks.has(chunkKey(job.cx, job.cy))) {
         this.flowQueue.shift();
         continue;
       }
-      const rowsNow = Math.min(
-        Math.ceil(flowBudget / CHUNK_SIZE),
-        CHUNK_SIZE - job.row,
-      );
-      const strip = this.flowCanvas.context.createImageData(CHUNK_SIZE, rowsNow);
-      for (let ry = 0; ry < rowsNow; ry++) {
-        for (let x = 0; x < CHUNK_SIZE; x++) {
-          const s = flowAt(
-            WORLD_SEED,
-            job.cx * CHUNK_SIZE + x,
-            job.cy * CHUNK_SIZE + job.row + ry,
-          );
-          const [r, g, b, a] = encodeFlow(s);
-          const p = (ry * CHUNK_SIZE + x) * 4;
-          strip.data[p] = r;
-          strip.data[p + 1] = g;
-          strip.data[p + 2] = b;
-          strip.data[p + 3] = a;
-        }
+      const batchWidth = Math.min(FLOW_BATCH_TILES, CHUNK_SIZE - job.col);
+      const strip = this.flowCanvas.context.createImageData(batchWidth, 1);
+      for (let i = 0; i < batchWidth; i++) {
+        const s = flowAt(
+          WORLD_SEED,
+          job.cx * CHUNK_SIZE + job.col + i,
+          job.cy * CHUNK_SIZE + job.row,
+        );
+        const [r, g, b, a] = encodeFlow(s);
+        const p = i * 4;
+        strip.data[p] = r;
+        strip.data[p + 1] = g;
+        strip.data[p + 2] = b;
+        strip.data[p + 3] = a;
       }
       this.flowCanvas.context.putImageData(
         strip,
-        fieldTexel(job.cx * CHUNK_SIZE),
+        fieldTexel(job.cx * CHUNK_SIZE + job.col),
         fieldTexel(job.cy * CHUNK_SIZE) + job.row,
       );
       flowDirty = true;
-      job.row += rowsNow;
-      flowBudget -= rowsNow * CHUNK_SIZE;
-      if (job.row >= CHUNK_SIZE) this.flowQueue.shift();
+      job.col += batchWidth;
+      if (job.col >= CHUNK_SIZE) {
+        job.col = 0;
+        job.row += 1;
+        if (job.row >= CHUNK_SIZE) this.flowQueue.shift();
+      }
+      if (performance.now() >= flowDeadline) break flowLoop;
     }
     if (flowDirty) this.flowCanvas.refresh();
 
