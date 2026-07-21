@@ -5,9 +5,13 @@ import { ArrowLeft, Loader2, Swords } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import { safeRedirectPath } from "@/lib/safe-redirect";
 
+// Sanitize `redirect` at the search boundary: a malicious value (absolute URL,
+// //host, @host, embedded scheme) becomes undefined and falls back to the
+// default, closing the open-redirect vector in navigate() and OAuth redirectTo.
 const searchSchema = z.object({
-  redirect: z.string().optional(),
+  redirect: z.string().optional().transform(safeRedirectPath),
 });
 
 export const Route = createFileRoute("/auth")({
