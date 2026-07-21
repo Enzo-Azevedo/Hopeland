@@ -219,7 +219,9 @@ class WorldScene extends Phaser.Scene {
       this.unsubscribeSettings?.();
     });
 
-    this.updateChunks(true);
+    // Anel inicial pelo caminho progressivo (1 chunk/frame): o bake de 25
+    // chunks num frame só custava ~650ms de tarefa síncrona (trace do dono).
+    this.updateChunks();
   }
 
   private frameFor(terrain: string, tx: number, ty: number): number {
@@ -402,7 +404,7 @@ class WorldScene extends Phaser.Scene {
     }
   }
 
-  private updateChunks(force = false) {
+  private updateChunks() {
     const center = {
       cx: tileToChunk(Math.floor(this.worldX / TILE_SIZE)),
       cy: tileToChunk(Math.floor(this.worldY / TILE_SIZE)),
@@ -411,7 +413,7 @@ class WorldScene extends Phaser.Scene {
       new Set(this.chunks.keys()),
       center,
       VIEW_RADIUS,
-      force ? (VIEW_RADIUS * 2 + 1) ** 2 : MAX_CHUNK_CREATES_PER_FRAME,
+      MAX_CHUNK_CREATES_PER_FRAME,
     );
     for (const key of plan.destroy) {
       const chunk = this.chunks.get(key)!;
