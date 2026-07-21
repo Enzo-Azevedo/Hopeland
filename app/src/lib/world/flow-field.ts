@@ -6,6 +6,7 @@
 
 import { channelFlowAt, MAX_CURRENT } from "./current";
 import { getTile } from "./world-gen";
+import { createTileCache } from "./tile-cache";
 
 export const FIELD_TILES = 160; // 5x5 chunk ring * 32 tiles
 
@@ -27,7 +28,7 @@ export function kindOf(terrain: string): FlowKind {
   return KIND_BY_TERRAIN[terrain] ?? 0;
 }
 
-const cache = new Map<string, FlowSample>();
+const cache = createTileCache<FlowSample>();
 
 export function flowAt(seed: string, tx: number, ty: number): FlowSample {
   const key = `${seed}:${tx},${ty}`;
