@@ -142,15 +142,12 @@ function deflectAtBanks(
   };
 }
 
-/**
- * Canal puro: geração + momento herdado + deflexão de margem. Sem
- * cancelamento, vento ou deriva — só a força que o próprio canal produz,
- * limitada ao teto do terreno (anti-trava).
- */
-export function rawChannelFlow(seed: string, tx: number, ty: number): CurrentVector {
-  const cap = strengthAt(seed, tx, ty);
-  if (cap === undefined) return { vx: 0, vy: 0 };
-
+/** Geração + momento herdado de um único tile (sem deflexão/suavização). */
+function baseChannelFlow(
+  seed: string,
+  tx: number,
+  ty: number,
+): { vx: number; vy: number; source: { tx: number; ty: number } | null } {
   let { vx, vy } = generatedAt(seed, tx, ty);
 
   // Momento herdado: cada passo a montante contribui metade da força do
@@ -168,8 +165,45 @@ export function rawChannelFlow(seed: string, tx: number, ty: number): CurrentVec
     weight *= MOMENTUM;
     pos = up;
   }
+  return { vx, vy, source };
+}
 
-  ({ vx, vy } = deflectAtBanks(seed, tx, ty, vx, vy, source));
+// Suavização 3x3 (pesos: centro 4, aresta 2, canto 1), só entre água.
+// Em bacias de convergência (enseadas) os vetores opostos se anulam na
+// média — a água acalma em vez de "lutar contra si mesma" (defeito visto
+// pelo dono nas setas de fluxo); num canal de rio os vizinhos concordam e
+// a direção sobrevive intacta.
+const SMOOTH_KERNEL: ReadonlyArray<readonly [number, number, number]> = [
+  [0, 0, 4],
+  [1, 0, 2], [-1, 0, 2], [0, 1, 2], [0, -1, 2],
+  [1, 1, 1], [1, -1, 1], [-1, 1, 1], [-1, -1, 1],
+];
+
+/**
+ * Canal puro: base suavizada + deflexão de margem, limitada ao teto do
+ * terreno (anti-trava). Sem cancelamento, vento ou deriva.
+ */
+export function rawChannelFlow(seed: string, tx: number, ty: number): CurrentVector {
+  const cap = strengthAt(seed, tx, ty);
+  if (cap === undefined) return { vx: 0, vy: 0 };
+
+  const center = baseChannelFlow(seed, tx, ty);
+  let vx = 0;
+  let vy = 0;
+  let totalW = 0;
+  for (const [ox, oy, w] of SMOOTH_KERNEL) {
+    const nx = tx + ox;
+    const ny = ty + oy;
+    if (strengthAt(seed, nx, ny) === undefined) continue;
+    const b = ox === 0 && oy === 0 ? center : baseChannelFlow(seed, nx, ny);
+    vx += b.vx * w;
+    vy += b.vy * w;
+    totalW += w;
+  }
+  vx /= totalW;
+  vy /= totalW;
+
+  ({ vx, vy } = deflectAtBanks(seed, tx, ty, vx, vy, center.source));
 
   const mag = Math.hypot(vx, vy);
   if (mag > cap) {
