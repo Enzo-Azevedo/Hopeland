@@ -4,6 +4,7 @@
 
 import { GEN, WORLD_SEED } from "./world-config";
 import { Simplex2, erodedFbm, fbm, hashString, ridgedFbm } from "./noise";
+import { createTileCache } from "./tile-cache";
 
 export type Biome =
   | "ocean" | "coast" | "mountain"
@@ -68,8 +69,8 @@ function warped(g: Generators, tx: number, ty: number): { wx: number; wy: number
 }
 
 /** Elevation in [-1, 1]. Continentalness + eroded detail + ridged mountains. */
-const elevationCache = new Map<string, number>();
-const tileCache = new Map<string, Tile>();
+const elevationCache = createTileCache<number>();
+const tileCache = createTileCache<Tile>();
 
 export function getElevation(seed: string, tx: number, ty: number): number {
   const key = `${seed}:${tx},${ty}`;
