@@ -209,7 +209,6 @@ class WorldScene extends Phaser.Scene {
     this.unsubscribeSettings = subscribeSettings((next) => {
       const prev = this.settings;
       this.settings = next;
-      if (next.alwaysAnimate && !this.game.loop.running) this.game.loop.wake();
       if (prev.showElevation !== next.showElevation) this.rebakeAllChunks();
       if (!next.showFlowArrows) this.hideFlowArrows();
       this.cleanFrames = 0;
@@ -558,7 +557,9 @@ class WorldScene extends Phaser.Scene {
     if (flowDirty) this.flowCanvas.refresh();
 
     // Setas de fluxo: recarrega a cada 400ms ou ao cruzar tile de câmera.
-    let arrowsDirty = false;
+    // O refresh de setas NÃO reseta o contador de sono: o frame atual já
+    // renderiza as setas novas, e no idle o wake de 400ms da água cobre a
+    // cadência — mesma economia do tick de água (achado da review).
     if (this.settings.showFlowArrows) {
       const camKey = `${Math.floor(this.cameras.main.scrollX / TILE_SIZE)},${Math.floor(this.cameras.main.scrollY / TILE_SIZE)}`;
       const now = performance.now();
@@ -566,7 +567,6 @@ class WorldScene extends Phaser.Scene {
         this.lastArrowRefresh = now;
         this.lastArrowCamKey = camKey;
         this.refreshFlowArrows();
-        arrowsDirty = true;
       }
     }
 
@@ -582,7 +582,7 @@ class WorldScene extends Phaser.Scene {
     if (this.settings.alwaysAnimate) {
       this.cleanFrames = 0;
       this.sleepAfterSettle = false;
-    } else if (dx !== 0 || dy !== 0 || chunksChanged || levelSettling || inWater || flowDirty || arrowsDirty) {
+    } else if (dx !== 0 || dy !== 0 || chunksChanged || levelSettling || inWater || flowDirty) {
       this.cleanFrames = 0;
       this.sleepAfterSettle = false;
     } else if (this.sleepAfterSettle) {
