@@ -22,6 +22,7 @@ import { windAt } from "@/lib/world/wind";
 import { FIELD_TILES, encodeFlow, fieldTexel, flowAt, kindOf } from "@/lib/world/flow-field";
 import { WATER_FRAG } from "@/lib/world/water-shader";
 import { SHORE_FRAG } from "@/lib/world/shore-shader";
+import { getSettings, subscribe as subscribeSettings } from "@/lib/settings";
 
 interface PhaserGameProps {
   onPositionChange?: (x: number, y: number) => void;
@@ -75,6 +76,13 @@ class WorldScene extends Phaser.Scene {
   private shoreQuad!: Phaser.GameObjects.Shader;
   private waterInterval = 0;
   private sleepAfterSettle = false;
+  private settings = getSettings();
+  private unsubscribeSettings?: () => void;
+  private flowArrows?: Phaser.GameObjects.Container;
+  private arrowPool: Phaser.GameObjects.Image[] = [];
+  private elevText?: Phaser.GameObjects.Text;
+  private lastArrowRefresh = 0;
+  private lastArrowCamKey = "";
 
   constructor(onMove?: (x: number, y: number) => void) {
     super("WorldScene");
@@ -190,6 +198,27 @@ class WorldScene extends Phaser.Scene {
       window.removeEventListener("resize", wake);
     });
 
+    // Textura da seta de fluxo (runtime, 12px, aponta +x).
+    const g = this.add.graphics();
+    g.fillStyle(0xffffff, 1);
+    g.fillTriangle(12, 6, 2, 1, 2, 11);
+    g.generateTexture("flow-arrow", 12, 12);
+    g.destroy();
+
+    // Configurações ao vivo: React escreve, a cena reage.
+    this.unsubscribeSettings = subscribeSettings((next) => {
+      const prev = this.settings;
+      this.settings = next;
+      if (prev.showElevation !== next.showElevation) this.rebakeAllChunks();
+      if (!next.showFlowArrows) this.hideFlowArrows();
+      this.cleanFrames = 0;
+      this.sleepAfterSettle = false;
+      if (!this.game.loop.running) this.game.loop.wake();
+    });
+    this.events.once(Phaser.Scenes.Events.DESTROY, () => {
+      this.unsubscribeSettings?.();
+    });
+
     this.updateChunks(true);
   }
 
@@ -283,6 +312,23 @@ class WorldScene extends Phaser.Scene {
             alpha: Math.min(0.3, 0.1 + diff * 0.05),
           });
         }
+
+        if (this.settings.showElevation) {
+          if (!this.elevText) {
+            this.elevText = this.make.text({
+              add: false,
+              style: {
+                fontFamily: "monospace",
+                fontSize: "10px",
+                color: "#ffffff",
+                stroke: "#000000",
+                strokeThickness: 2,
+              },
+            });
+          }
+          this.elevText.setText(String(level));
+          rt.draw(this.elevText, localX + 3, topY + 3);
+        }
       }
     }
     const slotX = fieldTexel(cx * CHUNK_SIZE);
@@ -298,6 +344,62 @@ class WorldScene extends Phaser.Scene {
     // this in order to see anything drawn to it").
     rt.render();
     this.chunks.set(chunkKey(cx, cy), { rt });
+  }
+
+  /** Destrói o anel; o caminho normal de streaming re-assa 1 chunk/frame. */
+  private rebakeAllChunks() {
+    for (const [key, chunk] of this.chunks) {
+      chunk.rt.destroy();
+      this.chunks.delete(key);
+    }
+    this.flowQueue.length = 0;
+  }
+
+  private hideFlowArrows() {
+    for (const a of this.arrowPool) a.setVisible(false);
+  }
+
+  /**
+   * Setas do fluxo REAL sobre a água visível. Usa flowAt (cache permanente,
+   * já aquecido pela fila de refinamento) + windNow composto aqui — nunca
+   * currentFor por seta (isso recriaria o custo de INP corrigido no #39).
+   */
+  private refreshFlowArrows() {
+    if (!this.flowArrows) {
+      this.flowArrows = this.add.container(0, 0).setDepth(600_000);
+    }
+    const cam = this.cameras.main;
+    const x0 = Math.floor(cam.scrollX / TILE_SIZE) - 1;
+    const y0 = Math.floor(cam.scrollY / TILE_SIZE) - 1;
+    const x1 = Math.ceil((cam.scrollX + cam.width) / TILE_SIZE) + 1;
+    const y1 = Math.ceil((cam.scrollY + cam.height) / TILE_SIZE) + 1;
+    let used = 0;
+    for (let ty = y0; ty <= y1; ty++) {
+      for (let tx = x0; tx <= x1; tx++) {
+        const s = flowAt(WORLD_SEED, tx, ty);
+        if (s.kind === 0) continue;
+        const infl = s.kind === 1 ? 1 : s.kind === 2 ? 0.5 : 0.1;
+        const vx = s.vx + this.windNow.vx * infl;
+        const vy = s.vy + this.windNow.vy * infl;
+        const mag = Math.hypot(vx, vy);
+        if (mag < 1e-4) continue;
+        let img = this.arrowPool[used];
+        if (!img) {
+          img = this.add.image(0, 0, "flow-arrow");
+          this.flowArrows.add(img);
+          this.arrowPool.push(img);
+        }
+        img
+          .setVisible(true)
+          .setPosition(tx * TILE_SIZE + TILE_SIZE / 2, ty * TILE_SIZE + TILE_SIZE / 2)
+          .setRotation(Math.atan2(vy, vx))
+          .setAlpha(0.25 + 0.6 * Math.min(1, mag / MAX_CURRENT));
+        used++;
+      }
+    }
+    for (let i = used; i < this.arrowPool.length; i++) {
+      this.arrowPool[i]!.setVisible(false);
+    }
   }
 
   private updateChunks(force = false) {
@@ -454,6 +556,20 @@ class WorldScene extends Phaser.Scene {
     }
     if (flowDirty) this.flowCanvas.refresh();
 
+    // Setas de fluxo: recarrega a cada 400ms ou ao cruzar tile de câmera.
+    // O refresh de setas NÃO reseta o contador de sono: o frame atual já
+    // renderiza as setas novas, e no idle o wake de 400ms da água cobre a
+    // cadência — mesma economia do tick de água (achado da review).
+    if (this.settings.showFlowArrows) {
+      const camKey = `${Math.floor(this.cameras.main.scrollX / TILE_SIZE)},${Math.floor(this.cameras.main.scrollY / TILE_SIZE)}`;
+      const now = performance.now();
+      if (now - this.lastArrowRefresh > 400 || camKey !== this.lastArrowCamKey) {
+        this.lastArrowRefresh = now;
+        this.lastArrowCamKey = camKey;
+        this.refreshFlowArrows();
+      }
+    }
+
     // Dirty tracking em nível de frame: hoje as únicas fontes de mudança
     // visual são movimento do jogador (e o lerp da câmera que o segue),
     // bake de chunk, o lerp do nível de renderização (subida/descida de
@@ -463,7 +579,10 @@ class WorldScene extends Phaser.Scene {
     // ATENÇÃO (futuro): NPCs ou outros jogadores visíveis são novas fontes
     // de sujeira — inclua-as aqui ou o mundo congela.
     const levelSettling = this.renderLevel !== targetLevel;
-    if (dx !== 0 || dy !== 0 || chunksChanged || levelSettling || inWater || flowDirty) {
+    if (this.settings.alwaysAnimate) {
+      this.cleanFrames = 0;
+      this.sleepAfterSettle = false;
+    } else if (dx !== 0 || dy !== 0 || chunksChanged || levelSettling || inWater || flowDirty) {
       this.cleanFrames = 0;
       this.sleepAfterSettle = false;
     } else if (this.sleepAfterSettle) {

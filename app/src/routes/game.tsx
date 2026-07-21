@@ -5,6 +5,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { PhaserGame } from "@/components/PhaserGame";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Switch } from "@/components/ui/switch";
+import { getSettings, saveSettings, subscribe, type GameSettings } from "@/lib/settings";
 import { CharacterPortrait } from "@/components/CharacterPortrait";
 import { clearActiveCharacter, loadActiveCharacter, saveActiveCharacter, updateActiveCharacter } from "@/lib/character-store";
 import { getActiveCharacter, setCharacterMoodDebug, setPlayedSecondsDebug } from "@/lib/character.functions";
@@ -32,6 +34,9 @@ function GamePage() {
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
   const [character, setCharacter] = useState<PersistedCharacter | null>(null);
   const [dead, setDead] = useState(false);
+  const [settings, setSettings] = useState<GameSettings>(() => getSettings());
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  useEffect(() => subscribe(setSettings), []);
 
   useEffect(() => {
     supabase.auth.getSession()
@@ -192,8 +197,54 @@ function GamePage() {
         </div>
       )}
 
-      <div className="absolute top-4 right-4">
-        <Button size="sm" variant="secondary" onClick={handleSignOut}>Sair</Button>
+      <div className="absolute top-4 right-4 flex flex-col items-end gap-2">
+        <div className="flex gap-2">
+          <Button
+            size="sm"
+            variant="secondary"
+            aria-label="Configurações"
+            onClick={() => setSettingsOpen((v) => !v)}
+          >
+            ⚙
+          </Button>
+          <Button size="sm" variant="secondary" onClick={handleSignOut}>Sair</Button>
+        </div>
+        {settingsOpen && (
+          <Card className="w-64 p-4 space-y-3 bg-background/90 backdrop-blur text-sm">
+            <div>
+              <p className="mb-2 font-medium text-muted-foreground uppercase text-[11px] tracking-wider">Gráficos</p>
+              <label className="flex items-center justify-between gap-3">
+                <span>Tiles sempre animados</span>
+                <Switch
+                  checked={settings.alwaysAnimate}
+                  onCheckedChange={(v) => saveSettings({ alwaysAnimate: v })}
+                  aria-label="Tiles sempre animados"
+                />
+              </label>
+            </div>
+            <div>
+              <p className="mb-2 font-medium text-muted-foreground uppercase text-[11px] tracking-wider">Jogabilidade</p>
+              <div className="space-y-2">
+                <label className="flex items-center justify-between gap-3">
+                  <span>Números de elevação</span>
+                  <Switch
+                    checked={settings.showElevation}
+                    onCheckedChange={(v) => saveSettings({ showElevation: v })}
+                    aria-label="Números de elevação"
+                  />
+                </label>
+                <label className="flex items-center justify-between gap-3">
+                  <span>Setas de fluxo</span>
+                  <Switch
+                    checked={settings.showFlowArrows}
+                    onCheckedChange={(v) => saveSettings({ showFlowArrows: v })}
+                    aria-label="Setas de fluxo"
+                  />
+                </label>
+              </div>
+            </div>
+          </Card>
+        )}
       </div>
     </div>
   );
