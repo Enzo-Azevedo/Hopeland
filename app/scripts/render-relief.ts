@@ -70,6 +70,25 @@ for (let y = 0; y < size; y++) {
         );
       }
     }
+    // Fio de luz / AO de vale na borda norte (mesma regra do bake).
+    const north = levelFor(getWorldTile(ox + x, oy + y - 1));
+    if (north < level) {
+      for (let tx2 = 0; tx2 < CELL; tx2++) {
+        px(x * CELL + tx2, topY, 255, 255, 246);
+      }
+    } else if (north > level) {
+      for (let wy = 0; wy < 2; wy++) {
+        for (let tx2 = 0; tx2 < CELL; tx2++) {
+          px(
+            x * CELL + tx2,
+            topY + wy,
+            Math.round(r * shade * 0.55),
+            Math.round(g * shade * 0.55),
+            Math.round(b * shade * 0.55),
+          );
+        }
+      }
+    }
   }
 }
 

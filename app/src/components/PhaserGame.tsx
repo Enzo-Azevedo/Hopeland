@@ -21,6 +21,7 @@ import { currentFor, MAX_CURRENT } from "@/lib/world/current";
 import { windAt } from "@/lib/world/wind";
 import { FIELD_TILES, encodeFlow, fieldTexel, flowAt, kindOf } from "@/lib/world/flow-field";
 import { WATER_FRAG } from "@/lib/world/water-shader";
+import { SHORE_FRAG } from "@/lib/world/shore-shader";
 
 interface PhaserGameProps {
   onPositionChange?: (x: number, y: number) => void;
@@ -71,6 +72,7 @@ class WorldScene extends Phaser.Scene {
   private renderedTime = 0;
   private windNow = { vx: 0, vy: 0 };
   private waterQuad!: Phaser.GameObjects.Shader;
+  private shoreQuad!: Phaser.GameObjects.Shader;
   private waterInterval = 0;
   private sleepAfterSettle = false;
 
@@ -125,8 +127,22 @@ class WorldScene extends Phaser.Scene {
       ["flow-field"],
     );
     this.waterQuad.setOrigin(0, 0).setScrollFactor(0).setDepth(-1_000_000_000);
+
+    // Espuma de costa: acima do terreno (500k), abaixo do jogador (1M) —
+    // a onda visivelmente sobe na areia e cobre a borda do barranco.
+    this.shoreQuad = this.add.shader(
+      { name: "shore", fragmentSource: SHORE_FRAG, setupUniforms },
+      0,
+      0,
+      this.scale.width,
+      this.scale.height,
+      ["flow-field"],
+    );
+    this.shoreQuad.setOrigin(0, 0).setScrollFactor(0).setDepth(500_000);
+
     this.scale.on(Phaser.Scale.Events.RESIZE, (size: Phaser.Structs.Size) => {
       this.waterQuad.setSize(size.width, size.height);
+      this.shoreQuad.setSize(size.width, size.height);
     });
 
     // Timer JS puro: os timers do Phaser não correm com o loop dormindo.
@@ -244,6 +260,29 @@ class WorldScene extends Phaser.Scene {
           originY: 0,
           tint: (b << 16) | (b << 8) | b,
         });
+
+        // Leitura de relevo (escolhas do dono): fio de luz na borda norte de
+        // quem está acima do vizinho norte; AO no topo de quem está no pé de
+        // um paredão ao norte. getWorldTile é global — sem costura.
+        const northLevel = levelFor(getWorldTile(tx, ty - 1));
+        if (northLevel < level) {
+          rt.stamp("tiles", this.manifest.white, localX, topY, {
+            originX: 0,
+            originY: 0,
+            scaleY: 3 / 32,
+            tint: 0xffffff,
+            alpha: 0.28,
+          });
+        } else if (northLevel > level) {
+          const diff = northLevel - level;
+          rt.stamp("tiles", this.manifest.white, localX, topY, {
+            originX: 0,
+            originY: 0,
+            scaleY: 6 / 32,
+            tint: 0x000000,
+            alpha: Math.min(0.3, 0.1 + diff * 0.05),
+          });
+        }
       }
     }
     const slotX = fieldTexel(cx * CHUNK_SIZE);
