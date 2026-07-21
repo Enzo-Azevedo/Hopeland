@@ -260,6 +260,29 @@ class WorldScene extends Phaser.Scene {
           originY: 0,
           tint: (b << 16) | (b << 8) | b,
         });
+
+        // Leitura de relevo (escolhas do dono): fio de luz na borda norte de
+        // quem está acima do vizinho norte; AO no topo de quem está no pé de
+        // um paredão ao norte. getWorldTile é global — sem costura.
+        const northLevel = levelFor(getWorldTile(tx, ty - 1));
+        if (northLevel < level) {
+          rt.stamp("tiles", this.manifest.white, localX, topY, {
+            originX: 0,
+            originY: 0,
+            scaleY: 3 / 32,
+            tint: 0xffffff,
+            alpha: 0.28,
+          });
+        } else if (northLevel > level) {
+          const diff = northLevel - level;
+          rt.stamp("tiles", this.manifest.white, localX, topY, {
+            originX: 0,
+            originY: 0,
+            scaleY: 6 / 32,
+            tint: 0x000000,
+            alpha: Math.min(0.3, 0.1 + diff * 0.05),
+          });
+        }
       }
     }
     const slotX = fieldTexel(cx * CHUNK_SIZE);
