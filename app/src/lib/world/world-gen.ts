@@ -68,7 +68,19 @@ function warped(g: Generators, tx: number, ty: number): { wx: number; wy: number
 }
 
 /** Elevation in [-1, 1]. Continentalness + eroded detail + ridged mountains. */
+const elevationCache = new Map<string, number>();
+const tileCache = new Map<string, Tile>();
+
 export function getElevation(seed: string, tx: number, ty: number): number {
+  const key = `${seed}:${tx},${ty}`;
+  const hit = elevationCache.get(key);
+  if (hit !== undefined) return hit;
+  const value = computeElevation(seed, tx, ty);
+  elevationCache.set(key, value);
+  return value;
+}
+
+function computeElevation(seed: string, tx: number, ty: number): number {
   const g = getGenerators(seed);
   const { wx, wy } = warped(g, tx, ty);
   const cont = fbm(g.continent, wx / GEN.continentScale, wy / GEN.continentScale, 4).value;
@@ -114,6 +126,15 @@ const BIOME_TERRAIN: Record<Biome, Terrain> = {
 };
 
 export function getTile(seed: string, tx: number, ty: number): Tile {
+  const key = `${seed}:${tx},${ty}`;
+  const hit = tileCache.get(key);
+  if (hit !== undefined) return hit;
+  const value = computeTile(seed, tx, ty);
+  tileCache.set(key, value);
+  return value;
+}
+
+function computeTile(seed: string, tx: number, ty: number): Tile {
   const g = getGenerators(seed);
   const elevation = getElevation(seed, tx, ty);
   // Gameplay slope from finite differences of the real elevation field.
