@@ -77,10 +77,28 @@ void main(void) {
   float waterness = smoothBA.y; // 0 terra .. 1 água (máscara bilinear)
 
   // Flow-map: duas fases dente-de-serra defasadas 0.5, cross-fade triangular.
-  float ph0 = fract(uTime * 0.00045);
+  // Rio: fase ~2x mais rápida e ruído anisotrópico (comprimido ~3x na
+  // perpendicular) — streaks alongados na direção da corrente.
+  bool isRiver = kindB >= 0.84;
+  float speed = isRiver ? 0.0009 : 0.00045;
+  float ph0 = fract(uTime * speed);
   float ph1 = fract(ph0 + 0.5);
-  vec2 uv0 = (snapped - flow * ph0 * FLOW_REACH) / TILE * NOISE_FREQ;
-  vec2 uv1 = (snapped - flow * ph1 * FLOW_REACH) / TILE * NOISE_FREQ;
+
+  float fmag = length(flow);
+  vec2 fdir = fmag > 0.001 ? flow / fmag : vec2(1.0, 0.0);
+  vec2 fperp = vec2(-fdir.y, fdir.x);
+
+  vec2 p0 = snapped - flow * ph0 * FLOW_REACH;
+  vec2 p1 = snapped - flow * ph1 * FLOW_REACH;
+  vec2 uv0;
+  vec2 uv1;
+  if (isRiver) {
+    uv0 = vec2(dot(p0, fdir), dot(p0, fperp) * 3.0) / TILE * NOISE_FREQ;
+    uv1 = vec2(dot(p1, fdir), dot(p1, fperp) * 3.0) / TILE * NOISE_FREQ;
+  } else {
+    uv0 = p0 / TILE * NOISE_FREQ;
+    uv1 = p1 / TILE * NOISE_FREQ;
+  }
   float n0 = vnoise(uv0) * 0.7 + vnoise(uv0 * 2.7) * 0.3;
   float n1 = vnoise(uv1) * 0.7 + vnoise(uv1 * 2.7) * 0.3;
   float w0 = 1.0 - abs(ph0 * 2.0 - 1.0);
@@ -95,7 +113,8 @@ void main(void) {
     ? mix(deep, shallow, depthRamp / 0.55)
     : mix(shallow, riverc, (depthRamp - 0.55) / 0.45);
   float tone = floor(wave * 4.0) / 4.0;
-  vec3 color = baseColor * (0.82 + tone * 0.30);
+  float toneAmp = isRiver ? 0.46 : 0.30;
+  vec3 color = baseColor * (0.80 + tone * toneAmp);
 
   // Espuma pixelada na fronteira água/terra, pulsando devagar.
   float pulse = 0.7 + 0.3 * sin(uTime * 0.002 + snapped.x * 0.08 + snapped.y * 0.05);
